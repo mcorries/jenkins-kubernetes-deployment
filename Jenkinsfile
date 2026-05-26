@@ -7,7 +7,11 @@ pipeline {
   stages {
     stage('Checkout Source') {
       steps {
-        git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+     // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+          timeout(time: 5, unit: 'MINUTES') {
+          checkout scm
+
       }
     }
     stage('Build image') {
