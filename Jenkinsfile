@@ -78,9 +78,7 @@ pipeline {
                 }																																	   
             }
         }
-    }
-
-        // Your Windows build, test, and deploy stages follow...
+  // Your Windows build, test, and deploy stages follow...
 
  // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
@@ -121,3 +119,4 @@ pipeline {
       }
     }
   }
+ }
