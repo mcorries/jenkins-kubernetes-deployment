@@ -7,18 +7,64 @@ pipeline {
   }
   agent any
   stages {
-      stage('Check GitHub Auth & Rate Limit') {
-            steps {
+      steps {
                 script {
-                    // This queries GitHub using the pipeline's active environment
-                    withCredentials([string(credentialsId: 'YOUR_GITHUB_CREDENTIAL_ID', variable: 'GITHUB_TOKEN')]) {
-                        def response = sh(script: "curl -s -H 'Authorization: token \$GITHUB_TOKEN' https://github.com", returnStdout: true).trim()
-                        echo "Current Rate Limit Status: ${response}"
+                    echo "Checking GitHub authentication for user: ${GITHUB_CREDS_USR}"
+                    
+                    // Run Windows PowerShell to query the GitHub API
+                    def psScript = """
+                        \$token = "${GITHUB_CREDS_PSW}"
+                        \$user  = "${GITHUB_CREDS_USR}"
+                        
+                        # Create basic auth header safely in PowerShell
+                        \$pair   = "\${user}:\${token}"
+                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
+                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        \$headers = @{ Authorization = "Basic \$base64" }
+                        
+                        try {
+                            # Fetch and parse the API response
+                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
+                            
+                            # Extract data
+                            \$limit     = \$response.resources.core.limit
+                            \$remaining = \$response.resources.core.remaining
+                            \$reset     = \$response.resources.core.reset
+                            
+                            Write-Output "LIMIT:\$limit"
+                            Write-Output "REMAINING:\$remaining"
+                            Write-Output "RESET:\$reset"
+                        } catch {
+                            Write-Error "GitHub API call failed. Check your PAT credentials."
+                            exit 1
+                        }
+                    """
+                    
+                    // Execute the script and catch the console output lines
+                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    
+                    // Parse variables out of the text output block
+                    def limit = (output =~ /LIMIT:(\d+)/)[0][1]
+                    def remaining = (output =~ /REMAINING:(\d+)/)[0][1]
+                    def resetTime = (output =~ /RESET:(\d+)/)[0][1]
+                    
+                    echo "----------------------------------------"
+                    echo "SUCCESS: Authenticated as ${GITHUB_CREDS_USR}"
+                    echo "GitHub API Rate Limit: ${limit}"
+                    echo "Remaining Requests: ${remaining}"
+                    echo "Reset Time (Epoch): ${resetTime}"
+                    echo "----------------------------------------"
+                    
+                    // Safety check: Fail the pipeline if rate limit is empty or too low
+                    if (remaining.toInteger() < 10) {
+                        error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                     }
                 }
             }
         }
-// Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
+        // Your Windows build, test, and deploy stages follow...
+
+ // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
       steps {
      // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
