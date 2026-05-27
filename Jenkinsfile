@@ -7,62 +7,62 @@ pipeline {
   }
   agent any
   stages {
-     stage('Verify GitHub Auth & Rate Limit') {
+    stage('Verify GitHub Auth & Rate Limit') {
     steps {
         script {
-            echo "Checking GitHub authentication for user: ${GITHUB_CREDS_USR}"
+            echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
             
-            // Run Windows PowerShell to query the GitHub API
             def psScript = '''
-                # Read credentials safely from the environment block
-                $token = $env:GITHUB_CREDS_PSW
-                $user  = $env:GITHUB_CREDS_USR
-                
-                # Create basic auth header safely in PowerShell
-                $pair   = "${user}:${token}"
-                $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                # Encode credentials safely
+                $pair = "${env.GITHUB_CREDS_USR}:${env.GITHUB_CREDS_PSW}"
+                $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
                 $base64 = [Convert]::ToBase64String($bytes)
-                $headers = @{ Authorization = "Basic $base64" }
+                
+                $headers = @{
+                    "Authorization" = "Basic $base64"
+                    "User-Agent"    = "Jenkins-Pipeline"
+                    "Accept"        = "application/vnd.github.v3+json"
+                }
                 
                 try {
-                    # Fetch and parse the API response
-                    $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                    # Query the dedicated GitHub rate limit API
+                    $response = Invoke-RestMethod -Uri "https://api.github.com/rate_limit" -Headers $headers -Method Get
                     
-                    # Extract data
-                    $limit     = $response.resources.core.limit
+                    # Extract the rate limit metrics
+                    $limit = $response.resources.core.limit
                     $remaining = $response.resources.core.remaining
-                    $reset     = $response.resources.core.reset
+                    $reset = $response.resources.core.reset
                     
                     Write-Output "LIMIT:$limit"
                     Write-Output "REMAINING:$remaining"
                     Write-Output "RESET:$reset"
                 } catch {
-                    Write-Error "GitHub API call failed. Check your PAT credentials."
+                    Write-Error "GitHub API call failed. Check your PAT credentials or network connectivity."
                     exit 1
                 }
             '''
-            
-            // Execute the script and catch the console output lines
+
+            // Execute the script
             def output = powershell(script: psScript, returnStdout: true).trim()
-            
-            // Match fields defensively to prevent index out of bounds exceptions
+
+            // Defensively match output lines
             def limitMatcher = (output =~ /LIMIT:(\d+)/)
             def remainingMatcher = (output =~ /REMAINING:(\d+)/)
             def resetMatcher = (output =~ /RESET:(\d+)/)
-            
+
             if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                def limit     = limitMatcher[0][1]
+                def limit = limitMatcher[0][1]
                 def remaining = remainingMatcher[0][1]
                 def resetTime = resetMatcher[0][1]
-                
+
                 echo "----------------------------------------"
-                echo "SUCCESS: Authenticated as ${GITHUB_CREDS_USR}"
+                echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
                 echo "GitHub API Rate Limit: ${limit}"
                 echo "Remaining Requests: ${remaining}"
                 echo "Reset Time (Epoch): ${resetTime}"
                 echo "----------------------------------------"
-                
-                // Safety check: Fail the pipeline if rate limit is critically low
+
+                // Fail the pipeline if rate limit is critically low
                 if (remaining.toInteger() < 10) {
                     error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                 }
