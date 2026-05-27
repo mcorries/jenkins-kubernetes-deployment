@@ -11,7 +11,7 @@ pipeline {
      // Add following to stop commit stage from hanging and bypass GitHub commit failures 
           timeout(time: 5, unit: 'MINUTES') {
           checkout scm
-
+        }
       }
     }
     stage('Build image') {
