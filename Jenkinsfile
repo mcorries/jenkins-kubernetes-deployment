@@ -64,6 +64,10 @@ pipeline {
     
 						// Convert Epoch seconds to a human-readable format
 						long epochSeconds = Long.parseLong(resetEpoch)
+						// Clean Groovy conversion logic
+						java.util.Date resetDate = new java.util.Date(epochSeconds * 1000L)
+						def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC"
+						
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
