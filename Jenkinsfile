@@ -57,9 +57,13 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
 
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        def limit     = limitMatcher
-                        def remaining = remainingMatcher
-                        def resetTime = resetMatcher
+						// Explicitly target the first capture group [0][1] to extract the text out of the Matcher object
+						def limit     = limitMatcher[0][1]
+						def remaining = remainingMatcher[0][1]
+						def resetEpoch = resetMatcher[0][1]
+    
+						// Convert Epoch seconds to a human-readable format
+						long epochSeconds = Long.parseLong(resetEpoch)
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
