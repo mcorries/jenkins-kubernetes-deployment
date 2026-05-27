@@ -7,7 +7,9 @@ pipeline {
   }
   agent any
   stages {
-      steps {
+     stage('Verify GitHub Auth & Rate Limit') {
+      steps{
+             stage('Verify GitHub Auth & Rate Limit') {
                 script {
                     echo "Checking GitHub authentication for user: ${GITHUB_CREDS_USR}"
                     
