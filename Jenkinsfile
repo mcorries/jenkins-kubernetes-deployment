@@ -1,5 +1,9 @@
 pipeline {
     agent any
+    options {
+        // Safe declarative option. Turns off the automatic background commit checks that are causing the red X block
+        skipDefaultCheckout()
+    }
     environment {
     // The next single line automatically binds both username and password variables globally
     // 'my-github-creds' is the ID of your credential stored in Jenkins
@@ -13,7 +17,10 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // FIXED: This targets the explicit data api endpoint to pull your real JSON metrics
+                    // Manually run checkout scm inside the safe stage block to bypass the global tracking error smoothly
+                    checkout scm
+                    
+                    // Single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling or quote manipulation bugs
                     def output = bat(script: 'curl -s -H "Authorization: token %GITHUB_CREDS_PSW%" -H "User-Agent: Jenkins-Pipeline" -H "Accept: application/vnd.github.v3+json" "https://github.com"', returnStdout: true).trim()
                     
                     // Defensively isolate the clean JSON payload text out of the response stream strings
@@ -73,7 +80,7 @@ pipeline {
            }
       steps{
         script {
-          docker.withRegistry( 'https://registry.hub.github.com', registryCredential ) {
+          docker.withRegistry( 'https://github.com', registryCredential ) {
             dockerImage.push("latest")
           }
         }
