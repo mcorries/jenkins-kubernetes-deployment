@@ -13,45 +13,14 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
-                    def psScript = '''
-                        $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
-                        
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
-                        
-                        try {
-                            # Fixed: Mathematical string concatenation isolates the colon from variables entirely
-                            $authString = $user + ':' + $token
-                            
-                            # Execute your verified curl layout directly inside the process runner
-                            $curlCmd = "curl -s -i -u `"$authString`" `"https://github.com`""
-                            $response = Invoke-Expression $curlCmd | Out-String
-                            
-                            # Safely extract metrics from curl's raw header text payload
-                            if ($response -match 'x-ratelimit-limit:\\s*(\\d+)') { $limit = $Matches[1] }
-                            if ($response -match 'x-ratelimit-remaining:\\s*(\\d+)') { $remaining = $Matches[1] }
-                            if ($response -match 'x-ratelimit-reset:\\s*(\\d+)') { $reset = $Matches[1] }
-                            
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
-                        } catch {
-                            Write-Error "GitHub API call failed. Check your PAT credentials."
-                            exit 1
-                        }
-                    '''
+                    // Native Windows batch step completely bypasses PowerShell parsing engine limits
+                    // The -u "%GITHUB_CREDS%" syntax natively executes your exact working curl format
+                    def output = bat(script: 'curl -s -i -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Execute the script safely
-                    def output = powershell(script: psScript, returnStdout: true).trim()
-                    
-                    // Match fields defensively to prevent index out of bounds exceptions
-                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
-                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    // Safely extract metrics from curl's raw header text payload
+                    def limitMatcher     = (output =~ /x-ratelimit-limit:\s*(\d+)/)
+                    def remainingMatcher = (output =~ /x-ratelimit-remaining:\s*(\d+)/)
+                    def resetMatcher     = (output =~ /x-ratelimit-reset:\s*(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
                         def limit     = limitMatcher[0][1]
@@ -69,7 +38,7 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
+                        error "Pipeline halted: Failed to parse GitHub API metrics from curl output.\nRaw Output:\n${output}"
                     }
                 }
             }
