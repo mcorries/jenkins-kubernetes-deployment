@@ -66,7 +66,7 @@ pipeline {
                         if (remaining.toInteger() < 10) {         
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
-                    }  c  else {
+                    } else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     } 
                 }
