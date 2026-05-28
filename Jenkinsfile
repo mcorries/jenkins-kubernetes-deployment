@@ -14,7 +14,6 @@ pipeline {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
                     def psScript = '''
-                        # These variables are populated automatically by the global environment block above
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
                         
@@ -34,8 +33,12 @@ pipeline {
                         }
                         
                         try {
-															   
-                            $response = Invoke-RestMethod -Uri "https://api.github.com/rate_limit" -Headers $headers -Method Get
+                            # 1. WhoAmI check to confirm exact token owner
+                            $userCheck = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            Write-Output "TOKEN_OWNER:$($userCheck.login)"
+
+                            # 2. Rate Limit check
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
@@ -50,42 +53,44 @@ pipeline {
                         }
                     '''
                     
+                    // Execute PowerShell and capture output string
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
-                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
+                    // Regex matchers with [0][1] array mapping to extract the regex groups cleanly
+                    def ownerMatcher     = (output =~ /TOKEN_OWNER:(.+)/)
+                    def limitMatcher     = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher = (output =~ /RESET:(\d+)/)
-
-                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-						// Explicitly target the first capture group [0][1] to extract the text out of the Matcher object
-						def limit     = limitMatcher[0][1]
-						def remaining = remainingMatcher[0][1]
-						def resetEpoch = resetMatcher[0][1]
-    
-						// Convert Epoch seconds to a human-readable format
-						long epochSeconds = Long.parseLong(resetEpoch)
-						// Clean Groovy conversion logic
-						java.util.Date resetDate = new java.util.Date(epochSeconds * 1000L)
-						def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC"))
-						
+                    def resetMatcher     = (output =~ /RESET:(\d+)/)
+                    
+                    if (ownerMatcher.find() && limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        def tokenOwner = ownerMatcher[0][1]
+                        def limit      = limitMatcher[0][1]
+                        def remaining  = remainingMatcher[0][1]
+                        def resetEpoch = resetMatcher[0][1]
+                        
+                        // 'as Long' casting circumvents the sandbox parseLong error completely!
+                        long epochSeconds = resetEpoch as Long
+                        java.util.Date resetDate = new java.util.Date(epochSeconds * 1000L)
+                        def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC"))
                         
                         echo "----------------------------------------"
-                        echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
+                        echo "SUCCESS: Authenticated via Jenkins Creds mapping!"
+                        echo "GitHub Token Owner Account: ${tokenOwner}" 
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
-                        echo "Reset Window Marker: ${resetTime}"
+                        echo "Reset Window Time: ${humanReadableTime}"
                         echo "----------------------------------------"
                         
-																	
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     }
-                }																																	   
+                }
             }
         }
+    }
   // Your Windows build, test, and deploy stages follow...
 
  // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
