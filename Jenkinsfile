@@ -15,7 +15,6 @@ pipeline {
                     
 					// Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
                     def psScript = '''
-                        # Fixed: Using standard PowerShell $env:VARIABLE syntax prevents Jenkins compilation crashes
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
 						
@@ -24,7 +23,6 @@ pipeline {
                             exit 1
                         }
 						
-                        # Fixed: Sub-expression notation $() handles the colon properly in single-quotes
                         $pair   = "$($user):$($token)"
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
@@ -35,8 +33,10 @@ pipeline {
                         }
                         
                         try {
-                            # Using your original environment URL layout
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            
+                            # DEBUG: This prints out exactly what your server is returning so we can fix the field names
+                            Write-Output "RAW_RESPONSE:$($response | ConvertTo-Json -Compress)"
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
@@ -60,7 +60,6 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text out of the matcher object using explicit tracking array indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
