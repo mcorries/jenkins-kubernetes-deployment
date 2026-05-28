@@ -14,15 +14,15 @@ pipeline {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
                     def psScript = """
-                        \$token = "${env.GITHUB_CREDS_PSW}"
-                        \$user  = "${env.GITHUB_CREDS_USR}"
+                        $token = "${env.GITHUB_CREDS_PSW}"
+                        $user  = "${env.GITHUB_CREDS_USR}"
                         
-                        \$pair   = \${user}:\${token}
-                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
-                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        $pair   = ${user}:${token}
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
                         
-                        \$headers = @{ 
-                            Authorization = "Basic \$base64" 
+                        $headers = @{ 
+                            Authorization = "Basic $base64" 
                         }
                         
                         try {
