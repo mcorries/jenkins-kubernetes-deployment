@@ -66,7 +66,7 @@ pipeline {
 						long epochSeconds = Long.parseLong(resetEpoch)
 						// Clean Groovy conversion logic
 						java.util.Date resetDate = new java.util.Date(epochSeconds * 1000L)
-						def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC")
+						def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC"))
 						
                         
                         echo "----------------------------------------"
