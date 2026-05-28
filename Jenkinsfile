@@ -80,7 +80,8 @@ pipeline {
            }
       steps{
         script {
-          docker.withRegistry( 'https://github.com', registryCredential ) {
+          // FIXED: Pointed strictly to the official public container registry endpoint to pass authentication
+          docker.withRegistry( 'https://registry.hub.docker.com', registryCredential ) {
             dockerImage.push("latest")
           }
         }
