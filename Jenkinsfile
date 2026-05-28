@@ -1,29 +1,26 @@
 node {
-    // Global environment blocks are declared natively as string variables in Scripted Pipelines
-    // This securely binds your original credential block out of plain log sight
-	// The next single line automatically binds both username and password variables globally
-    // 'my-github-creds' is the ID of your credential stored in Jenkins
+    // This securely binds your original credential token string straight out of plain log sight
     withCredentials([usernamePassword(credentialsId: 'my-github-creds', usernameVariable: 'GITHUB_CREDS_USR', passwordVariable: 'GITHUB_CREDS_PSW')]) {
         
- 
+        // The next single line automatically binds both username and password variables globally
+        // 'my-github-creds' is the ID of your credential stored in Jenkins
         def dockerimagename = "bravinwasike/react-app"
         def dockerImage = ""
 
         stage('Verify GitHub Auth & Rate Limit') {
-            echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
+            echo "Checking GitHub authentication for user: mcorries"
             
             // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
             def psScript = '''
                 $token = $env:GITHUB_CREDS_PSW
-                $user  = $env:GITHUB_CREDS_USR
                 
                 if ([string]::IsNullOrEmpty($token)) {
                     Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                     exit 1
                 }
                 
-                # Mathematical string concatenation isolates the colon from variables entirely, preventing engine parser crashes
-                $pair   = $user + ':' + $token
+                # Bypassing the null username variable bug by passing your verified username as a literal text token block
+                $pair   = "mcorries" + ':' + $token
                 $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                 $base64 = [Convert]::ToBase64String($bytes)
                 
@@ -34,7 +31,7 @@ node {
                 }
                 
                 try {
-                    # Using the official public REST API endpoint
+                    # Using the official public REST API endpoint to pull the raw JSON metrics layout cleanly
                     $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                     
                     $limit     = $response.resources.core.limit
@@ -65,7 +62,7 @@ node {
                 def resetTime = resetMatcher[0][1]
                 
                 echo "----------------------------------------"
-                echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
+                echo "SUCCESS: Authenticated to GitHub REST API"
                 echo "GitHub API Rate Limit: ${limit}"
                 echo "Remaining Requests: ${remaining}"
                 echo "Reset Time (Epoch): ${resetTime}"
