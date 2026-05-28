@@ -19,15 +19,11 @@ node {
                     exit 1
                 }
                 
-                # Bypassing the null username variable bug by passing your verified username as a literal text token block
-                $pair   = "mcorries" + ':' + $token
-                $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                $base64 = [Convert]::ToBase64String($bytes)
-                
+                # Using the modern HTTP Bearer standard recommended by GitHub for active Personal Access Tokens
                 $headers = @{ 
-                    Authorization = "Basic $base64" 
-                    "User-Agent"  = "Jenkins-Pipeline"
-                    "Accept"      = "application/vnd.github.v3+json"
+                    "Authorization" = "Bearer $token" 
+                    "User-Agent"    = "Jenkins-Pipeline"
+                    "Accept"        = "application/vnd.github.v3+json"
                 }
                 
                 try {
