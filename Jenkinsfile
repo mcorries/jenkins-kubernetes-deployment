@@ -13,47 +13,24 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Triple single quotes (''') force Jenkins to treat this as raw literal text, bypassing the sandbox completely
-                    def psScript = '''
-                        # Enforce modern TLS 1.2 protocol binding natively inside the execution engine
-                        [Net.ServicePointManager]::SecurityProtocol = 3072
-
-                        if ([string]::IsNullOrEmpty($env:GITHUB_CREDS_PSW)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
+                    // Fixed: Double-quoted bat step forces Jenkins to inject your plain text token value into curl before execution
+                    def output = bat(script: "curl -s -H \"Authorization: token ${env.GITHUB_CREDS_PSW}\" -H \"User-Agent: Jenkins-Pipeline\" \"https://github.com\"", returnStdout: true).trim()
+                    
+                    // Defensively isolate the clean JSON payload text out of the response stream strings
+                    if (!output.contains("{") || !output.contains("}")) {
+                        error "Pipeline halted: Server did not return a valid data payload.\nRaw Output:\n${output}"
+                    }
+                    
+                    def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
+                    
+                    try {
+                        // Native, plugin-free Groovy parsing maps numbers directly into memory variables in real-time
+                        def jsonParser = new groovy.json.JsonSlurper()
+                        def jsonResponse = jsonParser.parseText(cleanJsonText)
                         
-                        try {
-                            # Flat inline header definition prevents the Windows background service account from stripping keys out of memory
-                            $url = "https://github.com"
-                            $response = Invoke-RestMethod -Uri $url -Headers @{"Authorization"="token $env:GITHUB_CREDS_PSW"; "User-Agent"="Jenkins-Pipeline"; "Accept"="application/vnd.github.v3+json"} -Method Get
-                            
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
-                            
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
-                        } catch {
-                            Write-Error "GitHub API call failed. Check your PAT credentials."
-                            exit 1
-                        }
-                    '''
-                    
-                    // Execute the script safely using native PowerShell
-                    def output = powershell(script: psScript, returnStdout: true).trim()
-                    
-                    // Match fields defensively to prevent index out of bounds exceptions
-                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
-                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher = (output =~ /RESET:(\d+)/)
-                    
-                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text cleanly out of the match groups using explicit tracking array indexes
-                        def limit     = limitMatcher[0][1]
-                        def remaining = remainingMatcher[0][1]
-                        def resetTime = resetMatcher[0][1]
+                        def limit     = jsonResponse.resources.core.limit
+                        def remaining = jsonResponse.resources.core.remaining
+                        def resetTime = jsonResponse.resources.core.reset
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
@@ -63,10 +40,10 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
+                    } catch (Exception e) {
+                        error "Pipeline halted: Failed to parse GitHub API metrics payload. Error detail: ${e.getMessage()}\nTarget text:\n${cleanJsonText}"
                     }
                 }
             }
