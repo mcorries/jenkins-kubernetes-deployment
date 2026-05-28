@@ -7,6 +7,10 @@ pipeline {
     dockerimagename = "bravinwasike/react-app"
     dockerImage = ""											  				
     }		   
+    environment {
+        // Global credential binding maps seamlessly to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
+        GITHUB_CREDS = credentials('my-github-creds')
+    }
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
@@ -59,28 +63,18 @@ pipeline {
                         echo "Reset Time (Epoch): ${resetTime}"
                         echo "----------------------------------------"
                         
-                        if (remaining.toInteger() < 10) {
+                        if (remaining.toInteger() < 10) {         
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
-                    } else {
+                    }  c  else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
-                    }
+                    } 
                 }
-            }
-        }
- 	
-	// Your Windows build, test, and deploy stages follow...
+          }
+		       
+     }
+}
 
- // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
-/*    stage('Checkout Source') {
-      steps {
-     // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
-     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
-          timeout(time: 5, unit: 'MINUTES') {
-          checkout scm
-        }
-      }
-    }
 */
     stage('Build image') {
       steps{
@@ -106,7 +100,7 @@ pipeline {
         script {
           kubernetesDeploy(configs: "deployment.yaml", 
                                          "service.yaml")
-        }
+        }  
       }
     }
   }
