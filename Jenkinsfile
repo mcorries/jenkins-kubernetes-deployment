@@ -13,32 +13,57 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step targeting the correct rate limit endpoint with JSON content headers
-                    def output = bat(script: 'curl -s -H "Accept: application/json" -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
-                    
-                    if (!output.contains("{")) {
-                        error "Pipeline halted: Server did not return a valid JSON payload.\nRaw Output:\n${output}"
-                    }
-                    
-                    def jsonText = output.substring(output.indexOf("{"))
-                    
-                    try {
-                        def jsonParser = new groovy.json.JsonSlurper()
-                        def jsonResponse = jsonParser.parseText(jsonText)
+                    // Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
+                    def psScript = '''
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
-                        // Defensively support both raw rate payloads and resource object payload schemas
-                        def limit, remaining, resetTime
-                        if (jsonResponse.resources != null && jsonResponse.resources.core != null) {
-                            limit     = jsonResponse.resources.core.limit
-                            remaining = jsonResponse.resources.core.remaining
-                            resetTime = jsonResponse.resources.core.reset
-                        } else if (jsonResponse.rate != null) {
-                            limit     = jsonResponse.rate.limit
-                            remaining = jsonResponse.rate.remaining
-                            resetTime = jsonResponse.rate.reset
-                        } else {
-                            error "Pipeline halted: GitHub API JSON structure unrecognized.\nPayload:\n${jsonText}"
+                        if ([string]::IsNullOrEmpty($token)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                            exit 1
                         }
+                        
+                        # Use clean array joining to bypass the colon-scoping parser bug completely
+                        $pair   = ($user, $token) -join ':'
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
+                        $headers = @{ 
+                            "Authorization" = "Basic $base64"
+                            "User-Agent"    = "Jenkins-Pipeline"
+                        }
+                        
+                        try {
+                            # Invoke-WebRequest with explicit Basic parsing forces an uncached clean internet route
+                            $response = Invoke-WebRequest -Uri "https://github.com" -Headers $headers -UseBasicParsing -Method Get
+                            $json = ConvertFrom-Json $response.Content
+                            
+                            $limit     = $json.resources.core.limit
+                            $remaining = $json.resources.core.remaining
+                            $reset     = $json.resources.core.reset
+                            
+                            Write-Output "LIMIT:$limit"
+                            Write-Output "REMAINING:$remaining"
+                            Write-Output "RESET:$reset"
+                        } catch {
+                            Write-Error "GitHub API call failed. Check your PAT credentials."
+                            exit 1
+                        }
+                    '''
+                    
+                    // Execute the script safely
+                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    
+                    // Match fields defensively to prevent index out of bounds exceptions
+                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
+                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
+                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    
+                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // Extract text out of the matcher object using explicit tracking array indexes
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -50,8 +75,8 @@ pipeline {
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } catch (Exception e) {
-                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}\nRaw JSON string targeted:\n${jsonText}"
+                    } else {
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     }
                 }
             }
