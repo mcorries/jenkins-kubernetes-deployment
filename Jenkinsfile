@@ -1,6 +1,7 @@
-pipeline {
+﻿pipeline {
     agent any
     options {
+        // Safe declarative option. Turns off the automatic background commit checks that are causing the red X block
         skipDefaultCheckout()
     }
     environment {
@@ -16,10 +17,13 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
+                    // Manually run checkout scm inside the safe stage block to bypass the global tracking error smoothly
                     checkout scm
                     
+                    // Single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling or quote manipulation bugs
                     def output = bat(script: 'curl -s -H "Authorization: token %GITHUB_CREDS_PSW%" -H "User-Agent: Jenkins-Pipeline" -H "Accept: application/vnd.github.v3+json" "https://github.com"', returnStdout: true).trim()
                     
+                    // Defensively isolate the clean JSON payload text out of the response stream strings
                     if (!output.contains("{") || !output.contains("}")) {
                         error "Pipeline halted: Server did not return a valid data payload.\nRaw Output:\n${output}"
                     }
@@ -27,6 +31,7 @@ pipeline {
                     def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
                     
                     try {
+                        // Native, plugin-free Groovy parsing maps numbers directly into memory variables in real-time
                         def jsonParser = new groovy.json.JsonSlurper()
                         def jsonResponse = jsonParser.parseText(cleanJsonText)
                         
@@ -50,6 +55,18 @@ pipeline {
                 }
             }
         }
+
+// Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
+/*    stage('Checkout Source') {
+      steps {
+     // remove: git 'https://github.com'
+     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+          timeout(time: 5, unit: 'MINUTES') {
+          checkout scm
+        }
+      }
+    }
+*/
     stage('Build image') {
       steps{
         script {
@@ -57,7 +74,7 @@ pipeline {
         }
       }
     }
-    stage rampup_push^ {
+    stage('Pushing Image') {
       environment {
           registryCredential = 'dockerhub-credentials'
            }
