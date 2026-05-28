@@ -13,10 +13,14 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step targeting the official REST API to get the raw JSON string
-                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
+                    // Added strict Accept headers to force the route to output raw JSON payloads instead of web page layouts
+                    def output = bat(script: 'curl -s -H "Accept: application/json" -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Clean out the command echo lines from the Windows batch step output to isolate the raw JSON
+                    // Defensively isolate the JSON string out of the batch container logs
+                    if (!output.contains("{")) {
+                        error "Pipeline halted: Server did not return a valid data payload. Raw text: \n${output}"
+                    }
+                    
                     def jsonText = output.substring(output.indexOf("{"))
                     
                     try {
@@ -49,7 +53,7 @@ pipeline {
         // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
         /*    stage('Checkout Source') {
               steps {
-             // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+             // remove: git 'https://github.com'
              // Add following to stop commit stage from hanging and bypass GitHub commit failures 
                   timeout(time: 5, unit: 'MINUTES') {
                   checkout scm
