@@ -13,12 +13,10 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Fixed: Using double quotes (""") lets Jenkins handle the string interpolation perfectly
                     def psScript = """
                         \$token = "${env.GITHUB_CREDS_PSW}"
                         \$user  = "${env.GITHUB_CREDS_USR}"
                         
-                        # Your original syntax that worked perfectly
                         \$pair   = \${user}:\${token}
                         \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
                         \$base64 = [Convert]::ToBase64String(\$bytes)
@@ -28,7 +26,6 @@ pipeline {
                         }
                         
                         try {
-                            # Your original REST API endpoint configuration
                             \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
                             
                             \$limit     = \$response.resources.core.limit
@@ -44,16 +41,13 @@ pipeline {
                         }
                     """
                     
-                    // Execute the script and catch the console output lines
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
-                    // Match fields defensively to prevent index out of bounds exceptions
                     def limitMatcher = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // The index extracts the clean text out of the matcher object safely
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -65,7 +59,6 @@ pipeline {
                         echo "Reset Time (Epoch): ${resetTime}"
                         echo "----------------------------------------"
                         
-                        // Safety check: Fail the pipeline if rate limit is critically low
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
@@ -75,8 +68,8 @@ pipeline {
                 }
             }
         }
-
-  // Your Windows build, test, and deploy stages follow...
+ 	
+	// Your Windows build, test, and deploy stages follow...
 
  // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
@@ -117,4 +110,4 @@ pipeline {
       }
     }
   }
-}
+ } 
