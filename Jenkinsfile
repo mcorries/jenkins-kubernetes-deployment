@@ -13,43 +13,54 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    def psScript = """
-                        \$token = "${GITHUB_CREDS_PSW}"
-                        \$user  = "${GITHUB_CREDS_USR}"
+                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
+                    def psScript = '''
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
-                        # Restored to your exact original unquoted format that worked perfectly
-                        \$pair   = \${user}:\${token}
-                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
-                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        if ([string]::IsNullOrEmpty($token)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                            exit 1
+                        }
                         
-                        \$headers = @{ 
-                            Authorization = "Basic \$base64" 
+                        # Mathematical string concatenation isolates the colon from variables entirely, preventing engine parser crashes
+                        $pair   = $user + ':' + $token
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
+                        $headers = @{ 
+                            Authorization = "Basic $base64" 
                             "User-Agent"  = "Jenkins-Pipeline"
+                            "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
+                            # Using the official public API to populate the core data properties natively
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
-                            \$limit     = \$response.resources.core.limit
-                            \$remaining = \$response.resources.core.remaining
-                            \$reset     = \$response.resources.core.reset
+                            $limit     = $response.resources.core.limit
+                            $remaining = $response.resources.core.remaining
+                            $reset     = $response.resources.core.reset
                             
-                            Write-Output "LIMIT:\$limit"
-                            Write-Output "REMAINING:\$remaining"
-                            Write-Output "RESET:\$reset"
+                            Write-Output "LIMIT:$limit"
+                            Write-Output "REMAINING:$remaining"
+                            Write-Output "RESET:$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
-                    """
+                    '''
                     
+                    // Execute the script safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
+                    // Match fields defensively to prevent index out of bounds exceptions
                     def limitMatcher = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // Extract text cleanly out of the match groups using explicit tracking array indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -62,10 +73,10 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (\${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n\${output}"
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     }
                 }
             }
