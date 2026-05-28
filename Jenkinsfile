@@ -26,11 +26,12 @@ pipeline {
                         \$headers = @{ 
                             Authorization = "Basic \$base64" 
                             "User-Agent"  = "Jenkins-Pipeline"
+                            "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # Pointing directly to the official public REST API endpoint to pull the raw JSON schema
-                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
+                            # FIXED: Changed from github.com to ://github.com to retrieve the real JSON data metrics payload
+                            \$response = Invoke-RestMethod -Uri "https://://github.com" -Headers \$headers -Method Get
                             
                             \$limit     = \$response.resources.core.limit
                             \$remaining = \$response.resources.core.remaining
@@ -55,9 +56,9 @@ pipeline {
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
                         // Extract text cleanly out of the match groups using explicit tracking array indexes
-                        def limit     = limitMatcher
-                        def remaining = remainingMatcher
-                        def resetTime = resetMatcher
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -67,7 +68,7 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (\${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
