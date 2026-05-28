@@ -16,10 +16,10 @@ pipeline {
                     // Native Windows batch step targeting the correct REST API to fetch rate limit headers
                     def output = bat(script: 'curl -s -i -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Safely extract metrics from curl's raw header text payload
-                    def limitMatcher     = (output =~ /x-ratelimit-limit:\s*(\d+)/)
-                    def remainingMatcher = (output =~ /x-ratelimit-remaining:\s*(\d+)/)
-                    def resetMatcher     = (output =~ /x-ratelimit-reset:\s*(\d+)/)
+                    // Cross-platform wildcards (.*?\\d+) bypass invisible Windows carriage return (\\r\\n) formatting conflicts
+                    def limitMatcher     = (output =~ /x-ratelimit-limit:.*?(\d+)/)
+                    def remainingMatcher = (output =~ /x-ratelimit-remaining:.*?(\d+)/)
+                    def resetMatcher     = (output =~ /x-ratelimit-reset:.*?(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
                         def limit     = limitMatcher[0][1]
@@ -37,7 +37,6 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
                     } else {
-                        // Stripping out the raw variable dump prevents the 400k logs and secret warning
                         error "Pipeline halted: Failed to parse GitHub API metrics from curl output."
                     }
                 }
