@@ -1,11 +1,11 @@
 pipeline {
     agent any
     environment {
-    // The next single line automatically binds both username and password variables globally
-    // 'my-github-creds' is the ID of your credential stored in Jenkins
-    GITHUB_CREDS = credentials('my-github-creds')
-    dockerimagename = "bravinwasike/react-app"
-    dockerImage = ""                                                                            
+        // The next single line automatically binds both username and password variables globally
+        // 'my-github-creds' is the ID of your credential stored in Jenkins
+        GITHUB_CREDS = credentials('my-github-creds')
+        dockerimagename = "bravinwasike/react-app"
+        dockerImage = ""                                                                                            
     }          
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
@@ -13,36 +13,42 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Restored to your original triple double-quotes that handled the token injection perfectly
-                    def psScript = """
-                        \$token = "${env.GITHUB_CREDS_PSW}"
-                        \$user  = "${env.GITHUB_CREDS_USR}"
+                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
+                    def psScript = '''
+                        # Pull strings cleanly out of the secure machine process context
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
-                        # Restored to your exact unquoted string format that bypassed the colon-parsing bug
-                        \$pair   = \${user}:\${token}
-                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
-                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        if ([string]::IsNullOrEmpty($token)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                            exit 1
+                        }
                         
-                        \$headers = @{ 
-                            Authorization = "Basic \$base64" 
+                        # Concatenate string values safely without triggering character conflicts
+                        $pair   = "$user:$token"
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
+                        $headers = @{ 
+                            Authorization = "Basic $base64" 
                         }
                         
                         try {
-                            # Restored to your exact original working URL address
-                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
+                            # Using your exact working network configuration path
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
-                            \$limit     = \$response.resources.core.limit
-                            \$remaining = \$response.resources.core.remaining
-                            \$reset     = \$response.resources.core.reset
+                            $limit     = $response.resources.core.limit
+                            $remaining = $response.resources.core.remaining
+                            $reset     = $response.resources.core.reset
                             
-                            Write-Output "LIMIT:\$limit"
-                            Write-Output "REMAINING:\$remaining"
-                            Write-Output "RESET:\$reset"
+                            Write-Output "LIMIT:$limit"
+                            Write-Output "REMAINING:$remaining"
+                            Write-Output "RESET:$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
-                    """
+                    '''
                     
                     // Execute the script safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
@@ -53,7 +59,7 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // The index array references extract the raw text out of the match groups cleanly
+                        // Extract text cleanly out of the match groups using explicit array tracking indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -75,43 +81,44 @@ pipeline {
             }
         }
 
-// Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
-/*    stage('Checkout Source') {
-      steps {
-     // remove: git 'https://github.com'
-     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
-          timeout(time: 5, unit: 'MINUTES') {
-          checkout scm
+        // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
+        /*    stage('Checkout Source') {
+              steps {
+             // remove: git 'https://github.com'
+             // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+                  timeout(time: 5, unit: 'MINUTES') {
+                  checkout scm
+                }
+              }
+            }
+        */
+        stage('Build image') {
+            steps {
+                script {
+                    dockerImage = docker.build("${dockerimagename}")
+                }
+            }
         }
-      }
-    }
-*/
-    stage('Build image') {
-      steps{
-        script {
-          dockerImage = docker.build("${dockerimagename}")
+        
+        stage('Pushing Image') {
+            environment {
+                registryCredential = 'dockerhub-credentials'
+            }
+            steps {
+                script {
+                    docker.withRegistry('https://docker.com', registryCredential) {
+                        dockerImage.push("latest")
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Pushing Image') {
-      environment {
-          registryCredential = 'dockerhub-credentials'
-           }
-      steps{
-        script {
-          docker.withRegistry( 'https://docker.com', registryCredential ) {
-            dockerImage.push("latest")
-          }
+        
+        stage('Deploying React.js container to Kubernetes') {
+            steps {
+                script {
+                    kubernetesDeploy(configs: "deployment.yaml", "service.yaml")
+                }  
+            }
         }
-      }
     }
-    stage('Deploying React.js container to Kubernetes') {
-      steps {
-        script {
-          kubernetesDeploy(configs: "deployment.yaml", 
-                                         "service.yaml")
-        }  
-      }
-    }
-  }
 }
