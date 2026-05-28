@@ -39,55 +39,44 @@ pipeline {
                         }
                         
                         try {
-                            # 1. Verify exact token owner account name
-                            $userCheck = Invoke-RestMethod -Uri https://github.com -Headers $headers -Method Get
-                            Write-Output "TOKEN_OWNER:$($userCheck.login)"
-
-                            # 2. Grab valid API rate limits
-                            $response = Invoke-RestMethod -Uri "Use code with caution.groovyhttps://github.comUse code with caution.groovy" -Headers $headers -Method Get
+                            # Using the correct REST API endpoint that successfully returned your 5000 limit
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
-                            $limit      = $response.resources.core.limit
-                            $remaining  = $response.resources.core.remaining
-                            $resetEpoch = $response.resources.core.reset
-                            
-                            # Convert Epoch directly inside PowerShell to stay out of the Jenkins Sandbox
-                            $originDate = New-Object DateTime(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
-                            $humanReadableTime = $originDate.AddSeconds($resetEpoch).ToString("yyyy-MM-dd HH:mm:ss UTC")
+                            $limit     = $response.resources.core.limit
+                            $remaining = $response.resources.core.remaining
+                            $reset     = $response.resources.core.reset
                             
                             Write-Output "LIMIT:$limit"
                             Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET_TIME:$humanReadableTime"
+                            Write-Output "RESET:$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
                     '''
                     
-                    // Execute PowerShell script step safely
+                    // Execute the script and catch the console output lines
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
-                    // Regex match strings
-                    def ownerMatcher     = (output =~ /TOKEN_OWNER:(.+)/)
-                    def limitMatcher     = (output =~ /LIMIT:(\d+)/)
+                    // Match fields defensively to prevent index out of bounds exceptions
+                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher     = (output =~ /RESET_TIME:(.+)/)
+                    def resetMatcher = (output =~ /RESET:(\d+)/)
                     
-                    if (ownerMatcher.find() && limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // The [0][1] tells Groovy to pull the exact captured string value from the Regex match
-                        def tokenOwner        = ownerMatcher[0][1]
-                        def limit             = limitMatcher[0][1]
-                        def remaining         = remainingMatcher[0][1]
-                        def humanReadableTime = resetMatcher[0][1]
+                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // The [0][1] extracts the exact text match out of the Groovy matcher object
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
-                        echo "SUCCESS: Authenticated via Jenkins Creds mapping!"
-                        echo "GitHub Token Owner Account: ${tokenOwner}" 
+                        echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
-                        echo "Reset Window Time: ${humanReadableTime}"
+                        echo "Reset Window Time (Epoch): ${resetTime}"
                         echo "----------------------------------------"
                         
-                        // Fail the pipeline if rate limit is critically low
+                        // Safety check: Fail the pipeline if rate limit is critically low
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
@@ -97,6 +86,8 @@ pipeline {
                 }
             }
         }
+    }
+	
   // Your Windows build, test, and deploy stages follow...
 
  // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
@@ -109,6 +100,7 @@ pipeline {
         }
       }
     }
+*/
 */
     stage('Build image') {
       steps{
