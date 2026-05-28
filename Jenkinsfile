@@ -1,8 +1,7 @@
 pipeline {
     agent any
     environment {
-        // The next single line automatically binds both username and password variables globally
-        // 'my-github-creds' is the ID of your credential stored in Jenkins
+        // Global credential binding maps your token string natively to $env:GITHUB_CREDS_PSW
         GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
@@ -16,27 +15,16 @@ pipeline {
                     // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
                         
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
                         
-                        # Array joining isolates the colon character from raw variable strings safely
-                        $pair   = ($user, $token) -join ':'
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            Authorization = "Basic $base64" 
-                            "User-Agent"  = "Jenkins-Pipeline"
-                            "Accept"      = "application/vnd.github.v3+json"
-                        }
-                        
                         try {
-                            # CORRECTED: Pointing directly to the official public REST API endpoint
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            # Fixed: Passing the token securely as a text string with the correct headers
+                            $headers = @{ "User-Agent" = "Jenkins-Pipeline" }
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Token $token -Authentication Bearer -Method Get
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
