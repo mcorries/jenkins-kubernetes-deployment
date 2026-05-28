@@ -15,6 +15,9 @@ pipeline {
                     
                     // Triple single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling
                     def psScript = '''
+                        # Enforce secure TLS 1.2 protocol binding to match your verified terminal environment
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
                         
@@ -23,8 +26,8 @@ pipeline {
                             exit 1
                         }
                         
-                        # Array joining isolates the colon character from raw variable strings safely
-                        $pair   = ($user, $token) -join ':'
+                        # Use explicit mathematical string construction to isolate the colon and prevent legacy parser crashes
+                        $pair   = $user + ':' + $token
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
                         
@@ -35,7 +38,7 @@ pipeline {
                         }
                         
                         try {
-                            # Targeting the official public data REST API to retrieve the real JSON metrics payload
+                            # TARGETING THE OFFICIAL LIVE API GATEWAY: This pulls the raw JSON metrics layout cleanly without hitting web bot challenges
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
@@ -51,7 +54,7 @@ pipeline {
                         }
                     '''
                     
-                    // Execute the script safely
+                    // Execute the script safely using native PowerShell
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
                     // Match fields defensively to prevent index out of bounds exceptions
@@ -66,7 +69,7 @@ pipeline {
                         def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
-                        echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
+                        echo "SUCCESS: Authenticated to GitHub REST API"
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
                         echo "Reset Time (Epoch): ${resetTime}"
@@ -106,7 +109,7 @@ pipeline {
            }
       steps{
         script {
-          docker.withRegistry( 'https://docker.com', registryCredential ) {
+          docker.withRegistry( 'https://github.com', registryCredential ) {
             dockerImage.push("latest")
           }
         }
