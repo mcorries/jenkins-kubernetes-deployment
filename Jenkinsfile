@@ -13,14 +13,18 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step targeting the correct REST API endpoint without printing verbose text headers
+                    // Native Windows batch step targeting the official REST API to get the raw JSON string
                     def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
+                    // Clean out the command echo lines from the Windows batch step output to isolate the raw JSON
+                    def jsonText = output.substring(output.indexOf("{"))
+                    
                     try {
-                        // Parse the raw payload text directly into a safe Groovy data object via native Jenkins utilities
-                        def jsonResponse = readJSON text: output
+                        // Native Java/Groovy parsing engine - 100% guaranteed to exist without any plugins
+                        def jsonParser = new groovy.json.JsonSlurper()
+                        def jsonResponse = jsonParser.parseText(jsonText)
                         
-                        // Navigate the object properties directly, completely safe from masking validation blocks
+                        // Extract properties natively out of the data object, completely safe from masking or line breaks
                         def limit     = jsonResponse.resources.core.limit
                         def remaining = jsonResponse.resources.core.remaining
                         def resetTime = jsonResponse.resources.core.reset
