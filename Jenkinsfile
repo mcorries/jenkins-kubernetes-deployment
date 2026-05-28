@@ -24,8 +24,11 @@ pipeline {
                         }
                         
                         try {
-                            # Execute your verified curl syntax directly inside the process runner
-                            $curlCmd = "curl -s -i -u `"$user:$token`" `"https://github.com`""
+                            # Fixed: Mathematical string concatenation isolates the colon from variables entirely
+                            $authString = $user + ':' + $token
+                            
+                            # Execute your verified curl layout directly inside the process runner
+                            $curlCmd = "curl -s -i -u `"$authString`" `"https://github.com`""
                             $response = Invoke-Expression $curlCmd | Out-String
                             
                             # Safely extract metrics from curl's raw header text payload
