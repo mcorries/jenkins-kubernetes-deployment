@@ -15,6 +15,9 @@ pipeline {
                     
                     // Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
                     def psScript = '''
+                        # Enforce secure TLS 1.2 protocol binding to stop GitHub from instantly dropping the PS 5.1 connection
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
                         
