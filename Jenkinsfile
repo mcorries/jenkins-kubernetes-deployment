@@ -71,10 +71,20 @@ pipeline {
                     } 
                 }
           }
-		       
+		     
      }
 }
 
+// Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
+/*    stage('Checkout Source') {
+      steps {
+     // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+          timeout(time: 5, unit: 'MINUTES') {
+          checkout scm
+        }
+      }
+    }
 */
     stage('Build image') {
       steps{
