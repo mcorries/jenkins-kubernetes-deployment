@@ -13,43 +13,37 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
-                    def psScript = '''
-                        $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
+                    // Triple-double quotes (""") allow Jenkins to natively handle the secret injection securely
+                    def psScript = """
+                        \$token = "${GITHUB_CREDS_PSW}"
+                        \$user  = "${GITHUB_CREDS_USR}"
                         
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
+                        # Mathematical addition prevents the legacy PowerShell colon-scoping parsing bug
+                        \$pair   = "\${user}" + ':' + "\${token}"
+                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
+                        \$base64 = [Convert]::ToBase64String(\$bytes)
                         
-                        # Mathematical string concatenation isolates the colon from variables entirely, preventing engine parser crashes
-                        $pair   = $user + ':' + $token
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            Authorization = "Basic $base64" 
+                        \$headers = @{ 
+                            Authorization = "Basic \$base64" 
                             "User-Agent"  = "Jenkins-Pipeline"
-                            "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # Using the official public REST API endpoint
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            # Pointing directly to the official public REST API endpoint to pull the raw JSON schema
+                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
                             
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
+                            \$limit     = \$response.resources.core.limit
+                            \$remaining = \$response.resources.core.remaining
+                            \$reset     = \$response.resources.core.reset
                             
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
+                            Write-Output "LIMIT:\$limit"
+                            Write-Output "REMAINING:\$remaining"
+                            Write-Output "RESET:\$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
-                    '''
+                    """
                     
                     // Execute the script safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
@@ -73,10 +67,10 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low (\${remaining} remaining)."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n\${output}"
                     }
                 }
             }
