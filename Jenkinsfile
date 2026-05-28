@@ -1,42 +1,42 @@
 pipeline {
     agent any
     environment {
-    // The next single line automatically binds both username and password variables globally
-    // 'my-github-creds' is the ID of your credential stored in Jenkins
-    GITHUB_CREDS = credentials('my-github-creds')
-    dockerimagename = "bravinwasike/react-app"
-    dockerImage = ""											  				
-    }		   
+        // The next single line automatically binds both username and password variables globally
+        // 'my-github-creds' is the ID of your credential stored in Jenkins
+        GITHUB_CREDS = credentials('my-github-creds')
+        dockerimagename = "bravinwasike/react-app"
+        dockerImage = ""                                                                                
+    }               
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-					// Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
+                    // Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
-						
+                        
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
-						
+                        
+                        # Sub-expression notation $() handles the colon properly in single-quotes
                         $pair   = "$($user):$($token)"
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
                         
                         $headers = @{ 
                             Authorization = "Basic $base64"
-							"User-Agent"  = "Jenkins-Pipeline"
+                            "User-Agent"  = "Jenkins-Pipeline"
+                            "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
+                            # Using the official public REST API endpoint to pull the JSON data schema
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
-                            
-                            # DEBUG: This prints out exactly what your server is returning so we can fix the field names
-                            Write-Output "RAW_RESPONSE:$($response | ConvertTo-Json -Compress)"
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
@@ -60,6 +60,7 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // Extract text out of the matcher object using explicit tracking array indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -81,44 +82,44 @@ pipeline {
             }
         }
 
-
-// Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
-/*    stage('Checkout Source') {
-      steps {
-     // remove: git 'https://github.com'
-     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
-          timeout(time: 5, unit: 'MINUTES') {
-          checkout scm
+        // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
+        /*    stage('Checkout Source') {
+              steps {
+             // remove: git 'https://github.com'
+             // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+                  timeout(time: 5, unit: 'MINUTES') {
+                  checkout scm
+                }
+              }
+            }
+        */
+        stage('Build image') {
+            steps {
+                script {
+                    dockerImage = docker.build("${dockerimagename}")
+                }
+            }
         }
-      }
-    }
-*/
-    stage('Build image') {
-      steps{
-        script {
-          dockerImage = docker.build("${dockerimagename}")
+        
+        stage('Pushing Image') {
+            environment {
+                registryCredential = 'dockerhub-credentials'
+            }
+            steps {
+                script {
+                    docker.withRegistry('https://docker.com', registryCredential) {
+                        dockerImage.push("latest")
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Pushing Image') {
-      environment {
-          registryCredential = 'dockerhub-credentials'
-           }
-      steps{
-        script {
-          docker.withRegistry( 'https://docker.com', registryCredential ) {
-            dockerImage.push("latest")
-          }
+        
+        stage('Deploying React.js container to Kubernetes') {
+            steps {
+                script {
+                    kubernetesDeploy(configs: "deployment.yaml", "service.yaml")
+                }  
+            }
         }
-      }
     }
-    stage('Deploying React.js container to Kubernetes') {
-      steps {
-        script {
-          kubernetesDeploy(configs: "deployment.yaml", 
-                                         "service.yaml")
-        }  
-      }
-    }
-  }
 }
