@@ -22,7 +22,7 @@ pipeline {
                             exit 1
                         }
                         
-                        $pair   = "${user}:${token}"
+                        $pair   = "${user}`:${token}"
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
                         
