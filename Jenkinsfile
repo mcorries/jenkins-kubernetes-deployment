@@ -13,37 +13,36 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    def psScript = '''
-                        $token = $env:GITHUB_CREDS_PSW
+                    // Fixed: Using double quotes (""") lets Jenkins handle the string interpolation perfectly
+                    def psScript = """
+                        \$token = "${env.GITHUB_CREDS_PSW}"
+                        \$user  = "${env.GITHUB_CREDS_USR}"
                         
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
+                        # Your original syntax that worked perfectly
+                        \$pair   = \${user}:\${token}
+                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
+                        \$base64 = [Convert]::ToBase64String(\$bytes)
                         
-                        # Authenticate cleanly using the modern HTTP Bearer Token standard
-                        $headers = @{ 
-                            "Authorization" = "Bearer $token" 
-                            "User-Agent"    = "Jenkins-Pipeline"
-                            "Accept"        = "application/vnd.github.v3+json"
+                        \$headers = @{ 
+                            Authorization = "Basic \$base64" 
                         }
                         
                         try {
-                            # Fire request directly to the public REST API endpoint
-                            $response = Invoke-RestMethod -Uri https://github.com -Headers $headers -Method Get
+                            # Your original REST API endpoint configuration
+                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
                             
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
+                            \$limit     = \$response.resources.core.limit
+                            \$remaining = \$response.resources.core.remaining
+                            \$reset     = \$response.resources.core.reset
                             
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
+                            Write-Output "LIMIT:\$limit"
+                            Write-Output "REMAINING:\$remaining"
+                            Write-Output "RESET:\$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
-                    '''
+                    """
                     
                     // Execute the script and catch the console output lines
                     def output = powershell(script: psScript, returnStdout: true).trim()
@@ -54,7 +53,7 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // The [0][1] extracts the exact text match out of the Groovy matcher object
+                        // The index extracts the clean text out of the matcher object safely
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -63,7 +62,7 @@ pipeline {
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
-                        echo "Reset Window Time (Epoch): ${resetTime}"
+                        echo "Reset Time (Epoch): ${resetTime}"
                         echo "----------------------------------------"
                         
                         // Safety check: Fail the pipeline if rate limit is critically low
@@ -76,7 +75,7 @@ pipeline {
                 }
             }
         }
-	
+
   // Your Windows build, test, and deploy stages follow...
 
  // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
