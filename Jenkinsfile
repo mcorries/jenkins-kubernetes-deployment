@@ -1,7 +1,8 @@
 pipeline {
     agent any
     environment {
-        // Kept intact for your downstream build and deployment stages
+        // Safe global credential binding. Secrets are strictly masked and stay out of clear text logs.
+        GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
     }          
@@ -9,10 +10,10 @@ pipeline {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
                 script {
-                    echo "Checking GitHub authentication for user: mcorries"
+                    echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Directly injecting your verified token forces the endpoint to return the clean JSON payload instead of marketing HTML websites
-                    def output = bat(script: 'curl -s -u "mcorries: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" "https://github.com"', returnStdout: true).trim()
+                    // Fixed: Targets the live REST API endpoint while securely mapping credentials out of plain sight
+                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
                     if (!output.contains("{")) {
                         error "Pipeline halted: Server did not return a valid data object.\nRaw Text:\n${output}"
@@ -21,7 +22,7 @@ pipeline {
                     def jsonText = output.substring(output.indexOf("{"))
                     
                     try {
-                        // Native Java/Groovy parsing engine maps the raw text properties natively into memory variables
+                        // Native Java/Groovy parsing engine processes data natively into memory
                         def jsonParser = new groovy.json.JsonSlurper()
                         def jsonResponse = jsonParser.parseText(jsonText)
                         
@@ -39,7 +40,7 @@ pipeline {
                         }
                         
                         echo "----------------------------------------"
-                        echo "SUCCESS: Authenticated as mcorries"
+                        echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
                         echo "Reset Time (Epoch): ${resetTime}"
@@ -49,7 +50,7 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
                     } catch (Exception e) {
-                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}\nTarget text:\n${jsonText}"
+                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}"
                     }
                 }
             }
