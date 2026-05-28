@@ -13,24 +13,58 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step handles the credential string variable natively, completely avoiding PowerShell process bugs
-                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
-                    
-                    // Defensively isolate the clean JSON payload string out of the batch container logs
-                    if (!output.contains("{") || !output.contains("}")) {
-                        error "Pipeline halted: Server did not return a valid data payload.\nRaw Output:\n${output}"
-                    }
-                    
-                    def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
-                    
-                    try {
-                        // Native Groovy text parsing maps the metrics into variables without regular expression bugs
-                        def jsonParser = new groovy.json.JsonSlurper()
-                        def jsonResponse = jsonParser.parseText(cleanJsonText)
+                    // Single quotes (''') act as a hard firewall to stop Windows from altering the credential routing vectors
+                    def psScript = '''
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
-                        def limit     = jsonResponse.resources.core.limit
-                        def remaining = jsonResponse.resources.core.remaining
-                        def resetTime = jsonResponse.resources.core.reset
+                        if ([string]::IsNullOrEmpty($token)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                            exit 1
+                        }
+                        
+                        # Use clean array joining to bypass the colon-scoping parser bug completely
+                        $pair   = ($user, $token) -join ':'
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
+                        # Strict data headers force public GitHub to strictly deliver data payloads and ignore front-end web blocks
+                        $headers = @{ 
+                            Authorization = "Basic $base64" 
+                            "User-Agent"  = "Jenkins-Pipeline"
+                            "Accept"      = "application/vnd.github.v3+json"
+                        }
+                        
+                        try {
+                            # Targeting the official public REST API data endpoint directly
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            
+                            $limit     = $response.resources.core.limit
+                            $remaining = $response.resources.core.remaining
+                            $reset     = $response.resources.core.reset
+                            
+                            Write-Output "LIMIT:$limit"
+                            Write-Output "REMAINING:$remaining"
+                            Write-Output "RESET:$reset"
+                        } catch {
+                            Write-Error "GitHub API call failed. Check your PAT credentials."
+                            exit 1
+                        }
+                    '''
+                    
+                    // Execute the script safely using native PowerShell
+                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    
+                    // Match fields defensively to prevent index out of bounds exceptions
+                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
+                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
+                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    
+                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // Extract text out of the matcher object using explicit tracking array indexes
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated to GitHub REST API"
@@ -42,8 +76,8 @@ pipeline {
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } catch (Exception e) {
-                        error "Pipeline halted: Failed to parse GitHub API metrics. Error detail: ${e.getMessage()}\nTarget text:\n${cleanJsonText}"
+                    } else {
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     }
                 }
             }
