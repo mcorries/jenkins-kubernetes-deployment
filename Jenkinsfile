@@ -13,20 +13,41 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Fixed: Local object mapping bypasses the GitHub IP-level security challenge wall seamlessly
-                    def limit     = 5000
-                    def remaining = 4995
-                    def resetTime = 1779944480
-                    
-                    echo "----------------------------------------"
-                    echo "SUCCESS: Authenticated to GitHub REST API"
-                    echo "GitHub API Rate Limit: ${limit}"
-                    echo "Remaining Requests: ${remaining}"
-                    echo "Reset Time (Epoch): ${resetTime}"
-                    echo "----------------------------------------"
-                    
-                    if (remaining.toInteger() < 10) {
-                        error "Pipeline halted: GitHub API rate limit is critically low."
+                    try {
+                        // Securely format the basic authentication credentials string in memory
+                        def authString = "${env.GITHUB_CREDS_USR}:${env.GITHUB_CREDS_PSW}"
+                        def base64Auth = authString.getBytes().encodeBase64().toString()
+                        
+                        // Open a native, system-isolated Java network stream straight to the public REST API endpoint
+                        def url = new URL("https://github.com")
+                        def connection = (HttpURLConnection) url.openConnection()
+                        connection.setRequestMethod("GET")
+                        connection.setRequestProperty("Authorization", "Basic " + base64Auth)
+                        connection.setRequestProperty("User-Agent", "Jenkins-Pipeline")
+                        connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                        
+                        // Read the active text response block directly out of the stream buffer
+                        def responseText = connection.getInputStream().getText()
+                        
+                        // Programmatically parse the live data into variables in real-time memory
+                        def jsonResponse = new groovy.json.JsonSlurper().parseText(responseText)
+                        
+                        def limit     = jsonResponse.resources.core.limit
+                        def remaining = jsonResponse.resources.core.remaining
+                        def resetTime = jsonResponse.resources.core.reset
+                        
+                        echo "----------------------------------------"
+                        echo "SUCCESS: Programmatically Retrieved Live Metrics"
+                        echo "GitHub API Rate Limit: ${limit}"
+                        echo "Remaining Requests: ${remaining}"
+                        echo "Reset Time (Epoch): ${resetTime}"
+                        echo "----------------------------------------"
+                        
+                        if (remaining.toInteger() < 10) {
+                            error "Pipeline halted: GitHub API rate limit is critically low."
+                        }
+                    } catch (Exception e) {
+                        error "Pipeline halted: Native API validation check failed. Error detail: ${e.getMessage()}"
                     }
                 }
             }
@@ -35,7 +56,7 @@ pipeline {
 // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
       steps {
-     // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+     // remove: git 'https://github.com'
      // Add following to stop commit stage from hanging and bypass GitHub commit failures 
           timeout(time: 5, unit: 'MINUTES') {
           checkout scm
@@ -56,7 +77,7 @@ pipeline {
            }
       steps{
         script {
-          docker.withRegistry( 'https://registry.hub.github.com', registryCredential ) {
+          docker.withRegistry( 'https://github.com', registryCredential ) {
             dockerImage.push("latest")
           }
         }
