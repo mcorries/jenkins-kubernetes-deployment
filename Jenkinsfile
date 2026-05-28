@@ -17,8 +17,8 @@ pipeline {
                         \$token = "${GITHUB_CREDS_PSW}"
                         \$user  = "${GITHUB_CREDS_USR}"
                         
-                        # Your exact original syntax that worked perfectly before any time formatting was added
-                        \$pair   = \text{user}:\text{token}
+                        # Restored to your exact original unquoted format that worked perfectly
+                        \$pair   = \${user}:\${token}
                         \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
                         \$base64 = [Convert]::ToBase64String(\$bytes)
                         
