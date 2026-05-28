@@ -35,7 +35,7 @@ pipeline {
                         }
                         
                         try {
-                            # Using the official public API to populate the core data properties natively
+                            # Using the official public REST API endpoint
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
