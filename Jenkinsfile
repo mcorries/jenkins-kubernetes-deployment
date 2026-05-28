@@ -13,25 +13,32 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Added strict Accept headers to force the route to output raw JSON payloads instead of web page layouts
+                    // Native Windows batch step targeting the correct rate limit endpoint with JSON content headers
                     def output = bat(script: 'curl -s -H "Accept: application/json" -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Defensively isolate the JSON string out of the batch container logs
                     if (!output.contains("{")) {
-                        error "Pipeline halted: Server did not return a valid data payload. Raw text: \n${output}"
+                        error "Pipeline halted: Server did not return a valid JSON payload.\nRaw Output:\n${output}"
                     }
                     
                     def jsonText = output.substring(output.indexOf("{"))
                     
                     try {
-                        // Native Java/Groovy parsing engine - 100% guaranteed to exist without any plugins
                         def jsonParser = new groovy.json.JsonSlurper()
                         def jsonResponse = jsonParser.parseText(jsonText)
                         
-                        // Extract properties natively out of the data object, completely safe from masking or line breaks
-                        def limit     = jsonResponse.resources.core.limit
-                        def remaining = jsonResponse.resources.core.remaining
-                        def resetTime = jsonResponse.resources.core.reset
+                        // Defensively support both raw rate payloads and resource object payload schemas
+                        def limit, remaining, resetTime
+                        if (jsonResponse.resources != null && jsonResponse.resources.core != null) {
+                            limit     = jsonResponse.resources.core.limit
+                            remaining = jsonResponse.resources.core.remaining
+                            resetTime = jsonResponse.resources.core.reset
+                        } else if (jsonResponse.rate != null) {
+                            limit     = jsonResponse.rate.limit
+                            remaining = jsonResponse.rate.remaining
+                            resetTime = jsonResponse.rate.reset
+                        } else {
+                            error "Pipeline halted: GitHub API JSON structure unrecognized.\nPayload:\n${jsonText}"
+                        }
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -44,7 +51,7 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
                     } catch (Exception e) {
-                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}"
+                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}\nRaw JSON string targeted:\n${jsonText}"
                     }
                 }
             }
