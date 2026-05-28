@@ -13,7 +13,7 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') act as a firewall, completely safe from sandbox and string interpolation bugs
+                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
@@ -35,7 +35,7 @@ pipeline {
                         }
                         
                         try {
-                            # Targeting the official public data endpoint cleanly 
+                            # Using the official public REST API endpoint
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
