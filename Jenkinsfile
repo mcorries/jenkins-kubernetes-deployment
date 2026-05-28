@@ -13,60 +13,24 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Triple single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling
-                    def psScript = '''
-                        # Enforce secure TLS 1.2 protocol binding to match your verified terminal environment
-                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-                        $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
-                        
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
-                        
-                        # Use explicit mathematical string construction to isolate the colon and prevent legacy parser crashes
-                        $pair   = $user + ':' + $token
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            Authorization = "Basic $base64" 
-                            "User-Agent"  = "Jenkins-Pipeline"
-                            "Accept"      = "application/vnd.github.v3+json"
-                        }
-                        
-                        try {
-                            # TARGETING THE OFFICIAL LIVE API GATEWAY: This pulls the raw JSON metrics layout cleanly without hitting web bot challenges
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
-                            
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
-                            
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
-                        } catch {
-                            Write-Error "GitHub API call failed. Check your PAT credentials."
-                            exit 1
-                        }
-                    '''
+                    // Native Windows batch step handles the credential string variable natively, completely avoiding PowerShell process bugs
+                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Execute the script safely using native PowerShell
-                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    // Defensively isolate the clean JSON payload string out of the batch container logs
+                    if (!output.contains("{") || !output.contains("}")) {
+                        error "Pipeline halted: Server did not return a valid data payload.\nRaw Output:\n${output}"
+                    }
                     
-                    // Match fields defensively to prevent index out of bounds exceptions
-                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
-                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
                     
-                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text cleanly out of the match groups using explicit tracking array indexes
-                        def limit     = limitMatcher[0][1]
-                        def remaining = remainingMatcher[0][1]
-                        def resetTime = resetMatcher[0][1]
+                    try {
+                        // Native Groovy text parsing maps the metrics into variables without regular expression bugs
+                        def jsonParser = new groovy.json.JsonSlurper()
+                        def jsonResponse = jsonParser.parseText(cleanJsonText)
+                        
+                        def limit     = jsonResponse.resources.core.limit
+                        def remaining = jsonResponse.resources.core.remaining
+                        def resetTime = jsonResponse.resources.core.reset
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated to GitHub REST API"
@@ -76,10 +40,10 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
+                    } catch (Exception e) {
+                        error "Pipeline halted: Failed to parse GitHub API metrics. Error detail: ${e.getMessage()}\nTarget text:\n${cleanJsonText}"
                     }
                 }
             }
