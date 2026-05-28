@@ -16,24 +16,30 @@ pipeline {
                     // Runs the exact terminal command format that you verified yourself 
                     def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // If the response doesn't contain valid JSON text format, fail cleanly
-                    if (!output.contains("{") || !output.contains("}")) {
-                        error "Pipeline halted: Server did not return a valid data object.\nRaw Text:\n${output}"
+                    // Defensively locate the valid starting point of the JSON payload string
+                    if (!output.contains("{")) {
+                        error "Pipeline halted: Server did not return a valid JSON payload.\nRaw Output:\n${output}"
                     }
                     
-                    // Isolate just the text block between the outer brackets to strip carriage returns
-                    def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
+                    def jsonText = output.substring(output.indexOf("{"))
                     
-                    // Use basic string slicing to cleanly extract numbers out of the raw text stream
-                    def limitText     = cleanJsonText.split('"limit":')
-                    def remainingText = cleanJsonText.split('"remaining":')
-                    def resetText     = cleanJsonText.split('"reset":')
-                    
-                    if (limitText.size() > 1 && remainingText.size() > 1 && resetText.size() > 1) {
-                        // Strip trailing characters to extract raw numeric strings
-                        def limit     = limitText[1].split(',')[0].split('}')[0].trim()
-                        def remaining = remainingText[1].split(',')[0].split('}')[0].trim()
-                        def resetTime = resetText[1].split(',')[0].split('}')[0].trim()
+                    try {
+                        // Safe, standard Java class engine used to extract properties out of the data payload text
+                        def jsonParser = new groovy.json.JsonSlurper()
+                        def jsonResponse = jsonParser.parseText(jsonText)
+                        
+                        def limit, remaining, resetTime
+                        if (jsonResponse.resources != null && jsonResponse.resources.core != null) {
+                            limit     = jsonResponse.resources.core.limit
+                            remaining = jsonResponse.resources.core.remaining
+                            resetTime = jsonResponse.resources.core.reset
+                        } else if (jsonResponse.rate != null) {
+                            limit     = jsonResponse.rate.limit
+                            remaining = jsonResponse.rate.remaining
+                            resetTime = jsonResponse.rate.reset
+                        } else {
+                            error "Pipeline halted: GitHub API JSON structure unrecognized.\nPayload:\n${jsonText}"
+                        }
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -45,8 +51,8 @@ pipeline {
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } else {
-                        error "Pipeline halted: Failed to extract numeric metrics from curl text stream."
+                    } catch (Exception e) {
+                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}\nTarget text:\n${jsonText}"
                     }
                 }
             }
@@ -55,7 +61,7 @@ pipeline {
         // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
         /*    stage('Checkout Source') {
               steps {
-             // remove: git 'https://github.com'
+             // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
              // Add following to stop commit stage from hanging and bypass GitHub commit failures 
                   timeout(time: 5, unit: 'MINUTES') {
                   checkout scm
