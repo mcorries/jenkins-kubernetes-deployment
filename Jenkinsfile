@@ -1,11 +1,11 @@
 pipeline {
     agent any
     environment {
-    // The next single line automatically binds both username and password variables globally
-    // 'my-github-creds' is the ID of your credential stored in Jenkins
-    GITHUB_CREDS = credentials('my-github-creds')
-    dockerimagename = "bravinwasike/react-app"
-    dockerImage = ""                                                                                            
+        // The next single line automatically binds both username and password variables globally
+        // 'my-github-creds' is the ID of your credential stored in Jenkins
+        GITHUB_CREDS = credentials('my-github-creds')
+        dockerimagename = "bravinwasike/react-app"
+        dockerImage = ""                                                                                            
     }          
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
@@ -13,8 +13,7 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step completely bypasses PowerShell parsing engine limits
-                    // The -u "%GITHUB_CREDS%" syntax natively executes your exact working curl format
+                    // Native Windows batch step targeting the correct REST API to fetch rate limit headers
                     def output = bat(script: 'curl -s -i -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
                     // Safely extract metrics from curl's raw header text payload
@@ -35,53 +34,54 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
+                            error "Pipeline halted: GitHub API rate limit is critically low."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from curl output.\nRaw Output:\n${output}"
+                        // Stripping out the raw variable dump prevents the 400k logs and secret warning
+                        error "Pipeline halted: Failed to parse GitHub API metrics from curl output."
                     }
                 }
             }
         }
 
-
-// Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
-/*    stage('Checkout Source') {
-      steps {
-     // remove: git 'https://github.com'
-     // Add following to stop commit stage from hanging and bypass GitHub commit failures 
-          timeout(time: 5, unit: 'MINUTES') {
-          checkout scm
+        // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
+        /*    stage('Checkout Source') {
+              steps {
+             // remove: git 'https://github.com'
+             // Add following to stop commit stage from hanging and bypass GitHub commit failures 
+                  timeout(time: 5, unit: 'MINUTES') {
+                  checkout scm
+                }
+              }
+            }
+        */
+        stage('Build image') {
+            steps {
+                script {
+                    dockerImage = docker.build("${dockerimagename}")
+                }
+            }
         }
-      }
-    }
-*/
-    stage('Build image') {
-      steps{
-        script {
-          dockerImage = docker.build("${dockerimagename}")
+        
+        stage('Pushing Image') {
+            environment {
+                registryCredential = 'dockerhub-credentials'
+            }
+            steps {
+                script {
+                    docker.withRegistry('https://docker.com', registryCredential) {
+                        dockerImage.push("latest")
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Pushing Image') {
-      environment {
-          registryCredential = 'dockerhub-credentials'
-           }
-      steps{
-        script {
-          docker.withRegistry( 'https://docker.com', registryCredential ) {
-            dockerImage.push("latest")
-          }
+        
+        stage('Deploying React.js container to Kubernetes') {
+            steps {
+                script {
+                    kubernetesDeploy(configs: "deployment.yaml", "service.yaml")
+                }  
+            }
         }
-      }
     }
-    stage('Deploying React.js container to Kubernetes') {
-      steps {
-        script {
-          kubernetesDeploy(configs: "deployment.yaml", 
-                                         "service.yaml")
-        }  
-      }
-    }
-  }
 }
