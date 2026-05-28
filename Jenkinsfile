@@ -70,7 +70,8 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low (\${remaining} remaining)."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n\${output}"
+                        // Fixed: Removed backslash so Jenkins correctly evaluates and prints out the raw PowerShell text dump
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
                     }
                 }
             }
