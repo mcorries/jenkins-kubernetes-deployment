@@ -13,38 +13,43 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Triple-double quotes (""") allow Jenkins to natively handle the secret injection securely
-                    def psScript = """
-                        \$token = "${GITHUB_CREDS_PSW}"
-                        \$user  = "${GITHUB_CREDS_USR}"
+                    // Triple single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling
+                    def psScript = '''
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
-                        # Mathematical addition prevents the legacy PowerShell colon-scoping parsing bug
-                        \$pair   = "\${user}" + ':' + "\${token}"
-                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
-                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        if ([string]::IsNullOrEmpty($token)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                            exit 1
+                        }
                         
-                        \$headers = @{ 
-                            Authorization = "Basic \$base64" 
+                        # Array joining isolates the colon character from raw variable strings safely
+                        $pair   = ($user, $token) -join ':'
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
+                        $headers = @{ 
+                            Authorization = "Basic $base64" 
                             "User-Agent"  = "Jenkins-Pipeline"
                             "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # FIXED: Changed from github.com to ://github.com to retrieve the real JSON data metrics payload
-                            \$response = Invoke-RestMethod -Uri "https://://github.com" -Headers \$headers -Method Get
+                            # Targeting the official public data REST API to retrieve the real JSON metrics payload
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
-                            \$limit     = \$response.resources.core.limit
-                            \$remaining = \$response.resources.core.remaining
-                            \$reset     = \$response.resources.core.reset
+                            $limit     = $response.resources.core.limit
+                            $remaining = $response.resources.core.remaining
+                            $reset     = $response.resources.core.reset
                             
-                            Write-Output "LIMIT:\$limit"
-                            Write-Output "REMAINING:\$remaining"
-                            Write-Output "RESET:\$reset"
+                            Write-Output "LIMIT:$limit"
+                            Write-Output "REMAINING:$remaining"
+                            Write-Output "RESET:$reset"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
-                    """
+                    '''
                     
                     // Execute the script safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
