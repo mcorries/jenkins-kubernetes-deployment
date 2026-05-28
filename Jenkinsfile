@@ -15,22 +15,22 @@ pipeline {
                     
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
                         
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
                         
+                        # Authenticate cleanly using the modern HTTP Bearer Token standard
+                        $headers = @{ 
+                            "Authorization" = "Bearer $token" 
+                            "User-Agent"    = "Jenkins-Pipeline"
+                            "Accept"        = "application/vnd.github.v3+json"
+                        }
+                        
                         try {
-                            # Convert your token string into a safe, secure string structure
-                            $secToken = ConvertTo-SecureString $token -AsPlainText -Force
-                            
-                            # Create an official credential object natively using your variables
-                            $credential = New-Object System.Management.Automation.PSCredential($user, $secToken)
-
-                            # Let PowerShell handle the authentication headers natively using the REST API
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Credential $credential -Authentication Basic -Method Get
+                            # Fire request directly to the public REST API endpoint
+                            $response = Invoke-RestMethod -Uri https://github.com -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
