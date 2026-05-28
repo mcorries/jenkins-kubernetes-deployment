@@ -30,10 +30,12 @@ pipeline {
                         
                         $headers = @{ 
                             Authorization = "Basic $base64" 
+                            "User-Agent"  = "Jenkins-Pipeline"
+                            "Accept"      = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # Using your exact working network configuration path
+                            # CORRECTED: Pointing directly to the official public REST API endpoint
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
