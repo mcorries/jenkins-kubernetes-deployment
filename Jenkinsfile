@@ -13,60 +13,27 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
-                    def psScript = '''
-                        # Enforce secure TLS 1.2 protocol binding to stop GitHub from instantly dropping the PS 5.1 connection
-                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-                        $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
-                        
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
-                            exit 1
-                        }
-                        
-                        # Use clean array joining to bypass the colon-scoping parser bug completely
-                        $pair   = ($user, $token) -join ':'
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            "Authorization" = "Basic $base64"
-                            "User-Agent"    = "Jenkins-Pipeline"
-                        }
-                        
-                        try {
-                            # Invoke-WebRequest with explicit Basic parsing forces an uncached clean internet route
-                            $response = Invoke-WebRequest -Uri "https://github.com" -Headers $headers -UseBasicParsing -Method Get
-                            $json = ConvertFrom-Json $response.Content
-                            
-                            $limit     = $json.resources.core.limit
-                            $remaining = $json.resources.core.remaining
-                            $reset     = $json.resources.core.reset
-                            
-                            Write-Output "LIMIT:$limit"
-                            Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
-                        } catch {
-                            Write-Error "GitHub API call failed. Check your PAT credentials."
-                            exit 1
-                        }
-                    '''
+                    // Runs the exact terminal command format that you verified yourself 
+                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Execute the script safely
-                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    // If the response doesn't contain valid JSON text format, fail cleanly
+                    if (!output.contains("{") || !output.contains("}")) {
+                        error "Pipeline halted: Server did not return a valid data object.\nRaw Text:\n${output}"
+                    }
                     
-                    // Match fields defensively to prevent index out of bounds exceptions
-                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
-                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    // Isolate just the text block between the outer brackets to strip carriage returns
+                    def cleanJsonText = output.substring(output.indexOf("{"), output.lastIndexOf("}") + 1)
                     
-                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text out of the matcher object using explicit tracking array indexes
-                        def limit     = limitMatcher[0][1]
-                        def remaining = remainingMatcher[0][1]
-                        def resetTime = resetMatcher[0][1]
+                    // Use basic string slicing to cleanly extract numbers out of the raw text stream
+                    def limitText     = cleanJsonText.split('"limit":')
+                    def remainingText = cleanJsonText.split('"remaining":')
+                    def resetText     = cleanJsonText.split('"reset":')
+                    
+                    if (limitText.size() > 1 && remainingText.size() > 1 && resetText.size() > 1) {
+                        // Strip trailing characters to extract raw numeric strings
+                        def limit     = limitText[1].split(',')[0].split('}')[0].trim()
+                        def remaining = remainingText[1].split(',')[0].split('}')[0].trim()
+                        def resetTime = resetText[1].split(',')[0].split('}')[0].trim()
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -79,7 +46,7 @@ pipeline {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
                     } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
+                        error "Pipeline halted: Failed to extract numeric metrics from curl text stream."
                     }
                 }
             }
