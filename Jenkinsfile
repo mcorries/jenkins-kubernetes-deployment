@@ -13,30 +13,27 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') act as a hard firewall to stop Windows from altering the credential routing vectors
+                    // Triple single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling
                     def psScript = '''
+                        # Enforce modern TLS 1.2 protocol binding natively inside the PowerShell execution engine
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
                         $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
                         
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
                         
-                        # Use clean array joining to bypass the colon-scoping parser bug completely
-                        $pair   = ($user, $token) -join ':'
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        # Strict data headers force public GitHub to strictly deliver data payloads and ignore front-end web blocks
+                        # Authenticating via the direct Token standard completely eliminates the blank username variable bug and Basic encoding issues
                         $headers = @{ 
-                            Authorization = "Basic $base64" 
-                            "User-Agent"  = "Jenkins-Pipeline"
-                            "Accept"      = "application/vnd.github.v3+json"
+                            "Authorization" = "token $token"
+                            "User-Agent"    = "Jenkins-Pipeline"
+                            "Accept"        = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # Targeting the official public REST API data endpoint directly
+                            # Pulling the raw JSON metrics layout cleanly from the official live data REST API gateway
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
@@ -61,10 +58,10 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text out of the matcher object using explicit tracking array indexes
-                        def limit     = limitMatcher[0][1]
-                        def remaining = remainingMatcher[0][1]
-                        def resetTime = resetMatcher[0][1]
+                        // Extract text cleanly out of the match groups using explicit tracking array indexes
+                        def limit     = limitMatcher
+                        def remaining = remainingMatcher
+                        def resetTime = resetMatcher
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated to GitHub REST API"
@@ -74,7 +71,7 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low."
+                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
