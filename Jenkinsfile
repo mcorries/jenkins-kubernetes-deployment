@@ -7,10 +7,6 @@ pipeline {
     dockerimagename = "bravinwasike/react-app"
     dockerImage = ""											  				
     }		   
-    environment {
-        // Global credential binding maps seamlessly to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
-        GITHUB_CREDS = credentials('my-github-creds')
-    }
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
