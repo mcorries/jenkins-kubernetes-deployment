@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        // Safe global credential binding. Jenkins automatically generates the _USR and _PSW variables.
+        // Safe global credential binding maps to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
         GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
@@ -12,24 +12,27 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Triple single quotes (''') prevent Jenkins from messing with the code or causing interpolation bugs
+                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
                         
-                        # Authenticate using the modern Token header standard. This avoids the colon-scoping parser bug completely.
+                        # Use clean array joining to bypass the colon-scoping parser bug completely
+                        $pair   = ($user, $token) -join ':'
+                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
+                        $base64 = [Convert]::ToBase64String($bytes)
+                        
                         $headers = @{ 
-                            "Authorization" = "token $token"
-                            "User-Agent"    = "Jenkins-Pipeline"
-                            "Accept"        = "application/vnd.github.v3+json"
+                            Authorization = "Basic $base64" 
                         }
                         
                         try {
-                            # Fetch directly from the official data API
+                            # Restored to your original URL configuration that successfully bypassed the private mode plugin block
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
@@ -78,7 +81,7 @@ pipeline {
         // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
         /*    stage('Checkout Source') {
               steps {
-             // remove: git 'https://github.com'
+             // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
              // Add following to stop commit stage from hanging and bypass GitHub commit failures 
                   timeout(time: 5, unit: 'MINUTES') {
                   checkout scm
