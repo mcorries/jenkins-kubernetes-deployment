@@ -7,12 +7,6 @@ pipeline {
     dockerimagename = "bravinwasike/react-app"
     dockerImage = ""											  				
     }		   
-    pipeline {
-    agent any
-    environment {
-        // Global credential binding maps seamlessly to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
-        GITHUB_CREDS = credentials('my-github-creds')
-    }
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
@@ -86,7 +80,6 @@ pipeline {
                 }
             }
         }
-    }
 	
   // Your Windows build, test, and deploy stages follow...
 
