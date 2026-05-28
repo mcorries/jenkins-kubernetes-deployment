@@ -23,16 +23,18 @@ pipeline {
                             exit 1
                         }
                         
-                        # Sub-expression notation $() handles the colon properly in single-quotes
-                        $pair   = "$($user):$($token)"
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            Authorization = "Basic $base64"
-                            "User-Agent"  = "Jenkins-Pipeline"
-                            "Accept"      = "application/vnd.github.v3+json"
-                        }
+                        # Convert only the token string to base64, leaving the username completely out of the header
+						$bytes  = [System.Text.Encoding]::ASCII.GetBytes("$($token):")
+						$base64 = [Convert]::ToBase64String($bytes)
+
+						$headers = @{ 
+							Authorization = "Basic $base64"
+							"User-Agent"  = "Jenkins-Pipeline"
+							"Accept"      = "application/vnd.github.v3+json"
+						}
+
+						
+						
                         
                         try {
                             # Using the official public REST API endpoint to pull the JSON data schema
