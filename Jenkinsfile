@@ -22,19 +22,15 @@ pipeline {
                             exit 1
                         }
                         
-                        $pair   = "${user}`:${token}"
-                        $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
-                        $base64 = [Convert]::ToBase64String($bytes)
-                        
-                        $headers = @{ 
-                            "Authorization" = "Basic $base64" 
-                            "User-Agent"    = "Jenkins-Pipeline"
-                            "Accept"        = "application/vnd.github.v3+json"
-                        }
-                        
                         try {
-                            # Using the correct REST API endpoint that successfully returned your 5000 limit
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            # Convert your token string into a safe, secure string structure
+                            $secToken = ConvertTo-SecureString $token -AsPlainText -Force
+                            
+                            # Create an official credential object natively using your variables
+                            $credential = New-Object System.Management.Automation.PSCredential($user, $secToken)
+
+                            # Let PowerShell handle the authentication headers natively using the REST API
+                            $response = Invoke-RestMethod -Uri "https://github.com" -Credential $credential -Authentication Basic -Method Get
                             
                             $limit     = $response.resources.core.limit
                             $remaining = $response.resources.core.remaining
