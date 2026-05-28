@@ -15,8 +15,8 @@ pipeline {
                     
                     // Triple single quotes (''') guarantee that Jenkins passes your code cleanly without text scrambling
                     def psScript = '''
-                        # Enforce modern TLS 1.2 protocol binding natively inside the PowerShell execution engine
-                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                        # Force secure TLS 1.2 mapping using the native numeric integer vector (3072) to bypass background service engine bugs
+                        [Net.ServicePointManager]::SecurityProtocol = 3072
 
                         $token = $env:GITHUB_CREDS_PSW
                         
@@ -59,9 +59,9 @@ pipeline {
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
                         // Extract text cleanly out of the match groups using explicit tracking array indexes
-                        def limit     = limitMatcher
-                        def remaining = remainingMatcher
-                        def resetTime = resetMatcher
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated to GitHub REST API"
