@@ -7,6 +7,12 @@ pipeline {
     dockerimagename = "bravinwasike/react-app"
     dockerImage = ""											  				
     }		   
+    pipeline {
+    agent any
+    environment {
+        // Global credential binding maps seamlessly to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
+        GITHUB_CREDS = credentials('my-github-creds')
+    }
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
@@ -33,45 +39,45 @@ pipeline {
                         }
                         
                         try {
-                            # 1. WhoAmI check to confirm exact token owner
-                            $userCheck = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            # 1. Verify exact token owner account name
+                            $userCheck = Invoke-RestMethod -Uri https://github.com -Headers $headers -Method Get
                             Write-Output "TOKEN_OWNER:$($userCheck.login)"
 
-                            # 2. Rate Limit check
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
+                            # 2. Grab valid API rate limits
+                            $response = Invoke-RestMethod -Uri "Use code with caution.groovyhttps://github.comUse code with caution.groovy" -Headers $headers -Method Get
                             
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
+                            $limit      = $response.resources.core.limit
+                            $remaining  = $response.resources.core.remaining
+                            $resetEpoch = $response.resources.core.reset
+                            
+                            # Convert Epoch directly inside PowerShell to stay out of the Jenkins Sandbox
+                            $originDate = New-Object DateTime(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+                            $humanReadableTime = $originDate.AddSeconds($resetEpoch).ToString("yyyy-MM-dd HH:mm:ss UTC")
                             
                             Write-Output "LIMIT:$limit"
                             Write-Output "REMAINING:$remaining"
-                            Write-Output "RESET:$reset"
+                            Write-Output "RESET_TIME:$humanReadableTime"
                         } catch {
                             Write-Error "GitHub API call failed. Check your PAT credentials."
                             exit 1
                         }
                     '''
                     
-                    // Execute PowerShell and capture output string
+                    // Execute PowerShell script step safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
-                    // Regex matchers with [0][1] array mapping to extract the regex groups cleanly
+                    // Regex match strings
                     def ownerMatcher     = (output =~ /TOKEN_OWNER:(.+)/)
                     def limitMatcher     = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
-                    def resetMatcher     = (output =~ /RESET:(\d+)/)
+                    def resetMatcher     = (output =~ /RESET_TIME:(.+)/)
                     
                     if (ownerMatcher.find() && limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        def tokenOwner = ownerMatcher[0][1]
-                        def limit      = limitMatcher[0][1]
-                        def remaining  = remainingMatcher[0][1]
-                        def resetEpoch = resetMatcher[0][1]
-                        
-                        // 'as Long' casting circumvents the sandbox parseLong error completely!
-                        long epochSeconds = resetEpoch as Long
-                        java.util.Date resetDate = new java.util.Date(epochSeconds * 1000L)
-                        def humanReadableTime = resetDate.format("yyyy-MM-dd HH:mm:ss z", java.util.TimeZone.getTimeZone("UTC"))
+                        // The [0][1] tells Groovy to pull the exact captured string value from the Regex match
+                        def tokenOwner        = ownerMatcher[0][1]
+                        def limit             = limitMatcher[0][1]
+                        def remaining         = remainingMatcher[0][1]
+                        def humanReadableTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated via Jenkins Creds mapping!"
@@ -81,6 +87,7 @@ pipeline {
                         echo "Reset Window Time: ${humanReadableTime}"
                         echo "----------------------------------------"
                         
+                        // Fail the pipeline if rate limit is critically low
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
@@ -131,4 +138,4 @@ pipeline {
       }
     }
   }
- }
+}
