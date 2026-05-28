@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        // Global credential binding maps seamlessly to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
+        // The single line that binds your credentials globally. Jenkins auto-formats this as "username:password"
         GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
@@ -14,21 +14,21 @@ pipeline {
                     
                     // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
-                        $token = $env:GITHUB_CREDS_PSW
-                        $user  = $env:GITHUB_CREDS_USR
+                        # Direct access to the pre-combined Jenkins credential environment variable
+                        $pair = $env:GITHUB_CREDS
                         
-                        if ([string]::IsNullOrEmpty($token)) {
-                            Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
+                        if ([string]::IsNullOrEmpty($pair)) {
+                            Write-Error "PowerShell environment check failed: GITHUB_CREDS is empty!"
                             exit 1
                         }
                         
-                        # Mathematical string concatenation isolates the colon from variables completely, preventing engine parser crashes
-                        $pair   = "$user" + ":" + "$token"
+                        # Encode the clean pre-formatted credentials string natively to Base64
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
                         
                         $headers = @{ 
                             Authorization = "Basic $base64" 
+                            "User-Agent"  = "Jenkins-Pipeline"
                         }
                         
                         try {
@@ -57,7 +57,7 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text out of the matcher object using explicit tracking array indexes
+                        // Extract text cleanly out of the match groups using explicit tracking array indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
