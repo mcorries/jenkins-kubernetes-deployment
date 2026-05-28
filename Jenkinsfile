@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        // Safe global credential binding maps to $env:GITHUB_CREDS_USR and $env:GITHUB_CREDS_PSW
+        // The single line that binds your credentials globally to GITHUB_CREDS_USR and GITHUB_CREDS_PSW
         GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
@@ -12,7 +12,7 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
+                    // Single quotes (''') force Jenkins to ignore everything inside and pass it natively to PowerShell
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
                         $user  = $env:GITHUB_CREDS_USR
@@ -28,11 +28,13 @@ pipeline {
                         $base64 = [Convert]::ToBase64String($bytes)
                         
                         $headers = @{ 
-                            Authorization = "Basic $base64" 
+                            "Authorization" = "Basic $base64"
+                            "User-Agent"    = "Jenkins-Pipeline"
+                            "Accept"        = "application/vnd.github.v3+json"
                         }
                         
                         try {
-                            # Restored to your original URL configuration that successfully bypassed the private mode plugin block
+                            # Pointing directly to the official public REST API endpoint
                             $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Method Get
                             
                             $limit     = $response.resources.core.limit
@@ -51,12 +53,13 @@ pipeline {
                     // Execute the script safely
                     def output = powershell(script: psScript, returnStdout: true).trim()
                     
-                    // Match fields defensively using your original tracking parameters
+                    // Match fields defensively using your original token layout
                     def limitMatcher = (output =~ /LIMIT:(\d+)/)
                     def remainingMatcher = (output =~ /REMAINING:(\d+)/)
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // The index explicitly targets the captured text digits cleanly from the regex group
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -69,7 +72,7 @@ pipeline {
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low."
+                            error "Pipeline halted: GitHub API rate limit is critically low (${remaining} remaining)."
                         }
                     } else {
                         error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n${output}"
@@ -81,7 +84,7 @@ pipeline {
         // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
         /*    stage('Checkout Source') {
               steps {
-             // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+             // remove: git 'https://github.com'
              // Add following to stop commit stage from hanging and bypass GitHub commit failures 
                   timeout(time: 5, unit: 'MINUTES') {
                   checkout scm
