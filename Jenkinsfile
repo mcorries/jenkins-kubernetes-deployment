@@ -13,18 +13,17 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Native Windows batch step targeting the correct REST API to fetch rate limit headers
-                    def output = bat(script: 'curl -s -i -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
+                    // Native Windows batch step targeting the correct REST API endpoint without printing verbose text headers
+                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
                     
-                    // Cross-platform wildcards (.*?\\d+) bypass invisible Windows carriage return (\\r\\n) formatting conflicts
-                    def limitMatcher     = (output =~ /x-ratelimit-limit:.*?(\d+)/)
-                    def remainingMatcher = (output =~ /x-ratelimit-remaining:.*?(\d+)/)
-                    def resetMatcher     = (output =~ /x-ratelimit-reset:.*?(\d+)/)
-                    
-                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        def limit     = limitMatcher[0][1]
-                        def remaining = remainingMatcher[0][1]
-                        def resetTime = resetMatcher[0][1]
+                    try {
+                        // Parse the raw payload text directly into a safe Groovy data object via native Jenkins utilities
+                        def jsonResponse = readJSON text: output
+                        
+                        // Navigate the object properties directly, completely safe from masking validation blocks
+                        def limit     = jsonResponse.resources.core.limit
+                        def remaining = jsonResponse.resources.core.remaining
+                        def resetTime = jsonResponse.resources.core.reset
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
@@ -36,8 +35,8 @@ pipeline {
                         if (remaining.toInteger() < 10) {
                             error "Pipeline halted: GitHub API rate limit is critically low."
                         }
-                    } else {
-                        error "Pipeline halted: Failed to parse GitHub API metrics from curl output."
+                    } catch (Exception e) {
+                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}"
                     }
                 }
             }
@@ -46,7 +45,7 @@ pipeline {
         // Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
         /*    stage('Checkout Source') {
               steps {
-             // remove: git 'https://github.com'
+             // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
              // Add following to stop commit stage from hanging and bypass GitHub commit failures 
                   timeout(time: 5, unit: 'MINUTES') {
                   checkout scm
