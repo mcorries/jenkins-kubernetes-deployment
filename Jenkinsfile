@@ -5,8 +5,8 @@ pipeline {
     // 'my-github-creds' is the ID of your credential stored in Jenkins
     GITHUB_CREDS = credentials('my-github-creds')
     dockerimagename = "bravinwasike/react-app"
-    dockerImage = ""											  				
-    }		   
+    dockerImage = ""                                                                                            
+    }          
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
@@ -16,6 +16,7 @@ pipeline {
                     // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
                         $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
                         
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
@@ -23,13 +24,14 @@ pipeline {
                         }
                         
                         try {
-                            # Passing the validated token securely using native PowerShell 5 Bearer parameters
-                            $headers = @{ "User-Agent" = "Jenkins-Pipeline" }
-                            $response = Invoke-RestMethod -Uri "https://github.com" -Headers $headers -Token $token -Authentication Bearer -Method Get
+                            # Execute your verified curl syntax directly inside the process runner
+                            $curlCmd = "curl -s -i -u `"$user:$token`" `"https://github.com`""
+                            $response = Invoke-Expression $curlCmd | Out-String
                             
-                            $limit     = $response.resources.core.limit
-                            $remaining = $response.resources.core.remaining
-                            $reset     = $response.resources.core.reset
+                            # Safely extract metrics from curl's raw header text payload
+                            if ($response -match 'x-ratelimit-limit:\\s*(\\d+)') { $limit = $Matches[1] }
+                            if ($response -match 'x-ratelimit-remaining:\\s*(\\d+)') { $remaining = $Matches[1] }
+                            if ($response -match 'x-ratelimit-reset:\\s*(\\d+)') { $reset = $Matches[1] }
                             
                             Write-Output "LIMIT:$limit"
                             Write-Output "REMAINING:$remaining"
@@ -49,7 +51,6 @@ pipeline {
                     def resetMatcher = (output =~ /RESET:(\d+)/)
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
-                        // Extract text cleanly out of the match groups using explicit array tracking indexes
                         def limit     = limitMatcher[0][1]
                         def remaining = remainingMatcher[0][1]
                         def resetTime = resetMatcher[0][1]
@@ -72,7 +73,7 @@ pipeline {
         }
 
 
-// Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
+// Bypass pipeline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
       steps {
      // remove: git 'https://github.com'
