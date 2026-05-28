@@ -15,15 +15,17 @@ pipeline {
                     
 					// Single quotes (''') force Jenkins to ignore the code inside and let PowerShell evaluate it
                     def psScript = '''
-                        $token = ${env.GITHUB_CREDS_PSW}
-                        $user  = ${env.GITHUB_CREDS_USR}
+                        # Fixed: Using standard PowerShell $env:VARIABLE syntax prevents Jenkins compilation crashes
+                        $token = $env:GITHUB_CREDS_PSW
+                        $user  = $env:GITHUB_CREDS_USR
 						
                         if ([string]::IsNullOrEmpty($token)) {
                             Write-Error "PowerShell environment check failed: GITHUB_CREDS_PSW is empty!"
                             exit 1
                         }
 						
-                        $pair   = "${user}:${token}"
+                        # Fixed: Sub-expression notation $() handles the colon properly in single-quotes
+                        $pair   = "$($user):$($token)"
                         $bytes  = [System.Text.Encoding]::ASCII.GetBytes($pair)
                         $base64 = [Convert]::ToBase64String($bytes)
                         
@@ -84,7 +86,7 @@ pipeline {
 // Bypass pipleline checkout stage until I can ascertain why it is causing GitHub commit failure
 /*    stage('Checkout Source') {
       steps {
-     // remove: git 'https://github.com/mcorries/jenkins-kubernetes-deployment.git'
+     // remove: git 'https://github.com'
      // Add following to stop commit stage from hanging and bypass GitHub commit failures 
           timeout(time: 5, unit: 'MINUTES') {
           checkout scm
@@ -105,7 +107,7 @@ pipeline {
            }
       steps{
         script {
-          docker.withRegistry( 'https://registry.hub.docker.com', registryCredential ) {
+          docker.withRegistry( 'https://docker.com', registryCredential ) {
             dockerImage.push("latest")
           }
         }
@@ -120,4 +122,4 @@ pipeline {
       }
     }
   }
-} 
+}
