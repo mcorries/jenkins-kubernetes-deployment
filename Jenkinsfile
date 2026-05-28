@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        // Safe global credential binding. Secrets are strictly masked and stay out of clear text logs.
+        // The single line that binds your credentials globally to GITHUB_CREDS_USR and GITHUB_CREDS_PSW
         GITHUB_CREDS = credentials('my-github-creds')
         dockerimagename = "bravinwasike/react-app"
         dockerImage = ""                                                                                            
@@ -12,45 +12,63 @@ pipeline {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                     
-                    // Fixed: Targets the live REST API endpoint while securely mapping credentials out of plain sight
-                    def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
-                    
-                    if (!output.contains("{")) {
-                        error "Pipeline halted: Server did not return a valid data object.\nRaw Text:\n${output}"
-                    }
-                    
-                    def jsonText = output.substring(output.indexOf("{"))
-                    
-                    try {
-                        // Native Java/Groovy parsing engine processes data natively into memory
-                        def jsonParser = new groovy.json.JsonSlurper()
-                        def jsonResponse = jsonParser.parseText(jsonText)
+                    // The exact double-quoted format you had hours ago that let Jenkins natively bind the token text
+                    def psScript = """
+                        \$token = "${env.GITHUB_CREDS_PSW}"
+                        \$user  = "${env.GITHUB_CREDS_USR}"
                         
-                        def limit, remaining, resetTime
-                        if (jsonResponse.resources != null && jsonResponse.resources.core != null) {
-                            limit     = jsonResponse.resources.core.limit
-                            remaining = jsonResponse.resources.core.remaining
-                            resetTime = jsonResponse.resources.core.reset
-                        } else if (jsonResponse.rate != null) {
-                            limit     = jsonResponse.rate.limit
-                            remaining = jsonResponse.rate.remaining
-                            resetTime = jsonResponse.rate.reset
-                        } else {
-                            error "Pipeline halted: GitHub API JSON structure unrecognized.\nPayload:\n${jsonText}"
+                        # Your exact original syntax that worked perfectly before any time formatting was added
+                        \$pair   = \${user}:\${token}
+                        \$bytes  = [System.Text.Encoding]::ASCII.GetBytes(\$pair)
+                        \$base64 = [Convert]::ToBase64String(\$bytes)
+                        
+                        \$headers = @{ 
+                            Authorization = "Basic \$base64" 
                         }
+                        
+                        try {
+                            # Your exact original working URL endpoint
+                            \$response = Invoke-RestMethod -Uri "https://github.com" -Headers \$headers -Method Get
+                            
+                            \$limit     = \$response.resources.core.limit
+                            \$remaining = \$response.resources.core.remaining
+                            \$reset     = \$response.resources.core.reset
+                            
+                            Write-Output "LIMIT:\$limit"
+                            Write-Output "REMAINING:\$remaining"
+                            Write-Output "RESET:\$reset"
+                        } catch {
+                            Write-Error "GitHub API call failed. Check your PAT credentials."
+                            exit 1
+                        }
+                    """
+                    
+                    // Execute the script safely
+                    def output = powershell(script: psScript, returnStdout: true).trim()
+                    
+                    // Match fields defensively using your original token layout
+                    def limitMatcher = (output =~ /LIMIT:(\d+)/)
+                    def remainingMatcher = (output =~ /REMAINING:(\d+)/)
+                    def resetMatcher = (output =~ /RESET:(\d+)/)
+                    
+                    if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
+                        // Using precise array indexes to pull the raw text out of the matcher cleanly
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
                         echo "GitHub API Rate Limit: ${limit}"
                         echo "Remaining Requests: ${remaining}"
-                        echo "Reset Time (Epoch): ${resetTime}"
+                        echo "Reset Time (Epoch): ${resetTime}" // Restored right back to raw Epoch time layout!
                         echo "----------------------------------------"
                         
                         if (remaining.toInteger() < 10) {
-                            error "Pipeline halted: GitHub API rate limit is critically low."
+                            error "Pipeline halted: GitHub API rate limit is critically low (\${remaining} remaining)."
                         }
-                    } catch (Exception e) {
-                        error "Pipeline halted: Failed to parse GitHub API JSON payload. Error detail: ${e.getMessage()}"
+                    } else {
+                        error "Pipeline halted: Failed to parse GitHub API metrics from PowerShell output.\nRaw Output:\n\${output}"
                     }
                 }
             }
