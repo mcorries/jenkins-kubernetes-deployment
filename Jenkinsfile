@@ -1,8 +1,8 @@
 pipeline {
     agent any
     options {
-        // Safe declarative option. Turns off the automatic background checking that is causing the 401 loop.
-        skipDefaultCheckout()
+        // This parameter map strips the GitHub status updater hook out of the declarative runtime engine entirely
+        disableStatusUpdate: true
     }
     environment {
     // The next single line automatically binds both username and password variables globally
@@ -16,9 +16,6 @@ pipeline {
             steps {
                 script {
                     echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
-                    
-                    // Manually run checkout scm inside the safe stage block to bypass the global tracking error
-                    checkout scm
                     
                     // Single quotes (''') stop Jenkins from altering the code or causing syntax bugs
                     def psScript = '''
@@ -68,9 +65,9 @@ pipeline {
                     
                     if (limitMatcher.find() && remainingMatcher.find() && resetMatcher.find()) {
                         // Extract text cleanly out of the match groups using explicit tracking array indexes
-                        def limit     = limitMatcher
-                        def remaining = remainingMatcher
-                        def resetTime = resetMatcher
+                        def limit     = limitMatcher[0][1]
+                        def remaining = remainingMatcher[0][1]
+                        def resetTime = resetMatcher[0][1]
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Authenticated as ${env.GITHUB_CREDS_USR}"
