@@ -10,8 +10,8 @@ node {
         stage('Verify GitHub Auth & Rate Limit') {
             echo "Checking GitHub authentication for user: mcorries"
             
-            // Native Windows batch step handles the credential string variable natively, completely avoiding PowerShell process bugs
-            def output = bat(script: 'curl -s -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
+            // Fixed: Added silent background automation flags (-s -S -f) to prevent the Windows terminal hanging bug
+            def output = bat(script: 'curl -s -S -f -u "%GITHUB_CREDS%" "https://github.com"', returnStdout: true).trim()
             
             // Defensively isolate the clean JSON payload string out of the batch container logs
             if (!output.contains("{") || !output.contains("}")) {
