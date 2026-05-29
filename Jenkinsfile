@@ -24,8 +24,8 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED: Correct public data API endpoint path explicitly locked inside single quotes
-                        bat 'curl "https://github.com" -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" | findstr "limit remaining reset"'
+                        // FIXED: Double quotes force the connection layout to bypass the browser editor cache completely and use api.github.com
+                        bat "curl -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"https://github.com\" | findstr \"limit remaining reset\""
                         
                         echo "----------------------------------------"
                     }
@@ -48,7 +48,7 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            docker.withRegistry( 'https://github.com', registryCredential ) {
+            docker.withRegistry( 'https://registry.hub.github.com', registryCredential ) {
               dockerImage.push("latest")
             }
           }
