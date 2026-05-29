@@ -24,22 +24,13 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // GENERALISED AUTOMATIC PRETTY PRINTER: Writes a local file block first to bypass background variable isolation bugs completely
+                        // FIXED SYNTAX: Removing nested brackets avoids Windows CMD string parsing collisions entirely
                         bat '''
                             @echo off
                             C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" > rate_response.json
                             
-                            powershell -Command "
-                                if (Test-Path rate_response.json) {
-                                    $json = Get-Content rate_response.json -Raw | ConvertFrom-Json;
-                                    Write-Output '=== FULL REPOSITORY RATE LIMIT MATRIX ===';
-                                    $json.resources.PSObject.Properties | ForEach-Object {
-                                        Write-Output ('[Stage: ' + $_.Name.ToUpper().PadRight(28) + '] Remaining: ' + $_.Value.remaining + ' / ' + $_.Value.limit)
-                                    }
-                                } else {
-                                    Write-Error 'Failed to read data payload snapshot file from disk'
-                                }
-                            "
+                            powershell -Command "$json = Get-Content rate_response.json -Raw | ConvertFrom-Json; Write-Output '=== FULL REPOSITORY RATE LIMIT MATRIX ==='; foreach ($p in $json.resources.psobject.properties) { Write-Output ('Stage: ' + $p.Name + ' | Remaining: ' + $p.Value.remaining + ' / ' + $p.Value.limit) }"
+                            
                             del /f /q rate_response.json
                         '''
                         
