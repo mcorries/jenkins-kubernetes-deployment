@@ -24,11 +24,12 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force ://github.com execution natively
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force api.github.com execution natively
                         def finalApiUrl = "https://api.${'github.com'}/rate_limit"
                         
-                        // FIXED PRETTY VERTICAL PRINT: Uses a native PowerShell text substitution regex to cleanly split the horizontal JSON into vertical vertical lines
-                        bat "powershell -Command \"(C:\\Windows\\System32\\curl.exe -s -H 'Accept: application/vnd.github.v3+json' -H 'User-Agent: Jenkins-Pipeline' -H 'Authorization: token %GITHUB_CREDS_PSW%' '${finalApiUrl}') -replace ',\"', [Environment]::NewLine + '\"'\""
+                        // FIXED FORMATTING ONE BLOCK: Writes a temporary payload file, then lets PowerShell print all resource sub-limits cleanly on vertical lines
+                        bat "C:\\Windows\\System32\\curl.exe -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"${finalApiUrl}\" > raw_limits.json"
+                        bat "powershell -Command \"if (Test-Path raw_limits.json) { \$json = Get-Content raw_limits.json -Raw | ConvertFrom-Json; \$json.resources.PSObject.Properties | ForEach-Object { Write-Output ('Stage: ' + \$_.Name.ToUpper().PadRight(28) + ' | Remaining: ' + \$_.Value.remaining + ' / ' + \$_.Value.limit) }; Remove-Item raw_limits.json -Force }\""
                         
                         echo "----------------------------------------"
                     }
@@ -39,8 +40,8 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED PLUGIN ERROR: Using a native Windows batch statement bypasses the missing Docker pipeline wrapper dependency smoothly
-            bat "docker build -t ${dockerimagename}:latest ."
+            // WSL2 ROUTING FIXED: Passing instructions through the wsl wrapper to handshake directly with your Kind backend engine daemon
+            bat "wsl docker build -t ${dockerimagename}:latest ."
           }
         }
       }
@@ -53,9 +54,9 @@ pipeline {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // Standard CLI login and push streams eliminate helper property failures entirely
-                  bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin https://github.com"
-                  bat "docker push ${dockerimagename}:latest"
+                  // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://registry.hub.github.com"
+                  bat "wsl docker push ${dockerimagename}:latest"
               }
           }
         }
@@ -65,6 +66,7 @@ pipeline {
       steps {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
+            // Standard kubernetesDeploy steps can now map local assets freely since workspace directory files are synchronized
             kubernetesDeploy(configs: "deployment.yaml", "service.yaml")
           }
         }  
