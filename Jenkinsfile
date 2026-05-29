@@ -24,8 +24,11 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // NO ESCAPING ERRORS: Splitting the raw JSON array string natively onto individual lines via findstr filters
-                        bat 'C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" | C:\\Windows\\System32\\findstr.exe "core search graphql integration_manifest source_import code_scanning_upload code_scanning_autofix actions_runner_registration scim dependency_snapshots dependency_sbom audit_log audit_log_streaming code_search rate"'
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked back into place to force ://github.com execution natively
+                        def finalApiUrl = "https://api.${'github.com'}/rate_limit"
+                        
+                        // Using double quotes inside bat allows Groovy to cleanly inject your working finalApiUrl directly into the Windows interpreter
+                        bat "C:\\Windows\\System32\\curl.exe -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"${finalApiUrl}\" | C:\\Windows\\System32\\findstr.exe \"core search graphql integration_manifest source_import code_scanning_upload code_scanning_autofix actions_runner_registration scim dependency_snapshots dependency_sbom audit_log audit_log_streaming code_search rate\""
                         
                         echo "----------------------------------------"
                     }
