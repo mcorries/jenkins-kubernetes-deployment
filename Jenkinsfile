@@ -24,15 +24,8 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED CASING: Using capitalized .PSObject.Properties ensures Windows PowerShell 5.1 maps the object keys cleanly
-                        bat '''
-                            @echo off
-                            C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" > rate_response.json
-                            
-                            powershell -Command "$json = Get-Content rate_response.json -Raw | ConvertFrom-Json; Write-Output '=== FULL REPOSITORY RATE LIMIT MATRIX ==='; foreach ($p in $json.resources.PSObject.Properties) { Write-Output ('Stage: ' + $p.Name + ' | Remaining: ' + $p.Value.remaining + ' / ' + $p.Value.limit) }"
-                            
-                            del /f /q rate_response.json
-                        '''
+                        // NO ESCAPING ERRORS: Splitting the raw JSON array string natively onto individual lines via findstr filters
+                        bat 'C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" | C:\\Windows\\System32\\findstr.exe "core search graphql integration_manifest source_import code_scanning_upload code_scanning_autofix actions_runner_registration scim dependency_snapshots dependency_sbom audit_log audit_log_streaming code_search rate"'
                         
                         echo "----------------------------------------"
                     }
