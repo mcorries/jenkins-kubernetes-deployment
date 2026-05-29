@@ -16,7 +16,7 @@ pipeline {
             steps {
                 script {
                     ws('ins-kubernetes-deployment_master_fresh') {
-                        echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
+                        echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}
                         
                         // Manually run checkout scm inside the safe stage block to bypass the global tracking error smoothly
                         checkout scm
