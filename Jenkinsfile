@@ -24,12 +24,12 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force ://github.com execution natively
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force api.github.com execution natively
                         def finalApiUrl = "https://api.${'github.com'}/rate_limit"
                         
-                        // FIXED HUMAN READABLE CLOCK: Converts the Unix epoch numerical integer dynamically into a standard local clock format string
+                        // FIXED TYPE PREFIX: Using [System.DateTimeOffset] maps the .NET class perfectly to translate the epoch integers
                         bat "C:\\Windows\\System32\\curl.exe -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"${finalApiUrl}\" > raw_limits.json"
-                        bat "powershell -Command \"if (Test-Path raw_limits.json) { \$json = Get-Content raw_limits.json -Raw | ConvertFrom-Json; \$json.resources.PSObject.Properties | ForEach-Object { \$time = [API.DateTimeOffset]::FromUnixTimeSeconds(\$_.Value.reset).LocalDateTime.ToString('yyyy-MM-dd HH:mm:ss'); Write-Output ('Stage: ' + \$_.Name.ToUpper().PadRight(28) + ' | Remaining: ' + \$_.Value.remaining.ToString().PadRight(5) + ' / ' + \$_.Value.limit.ToString().PadRight(6) + ' | Resets At: ' + \$time) }; Remove-Item raw_limits.json -Force }\""
+                        bat "powershell -Command \"if (Test-Path raw_limits.json) { \$json = Get-Content raw_limits.json -Raw | ConvertFrom-Json; \$json.resources.PSObject.Properties | ForEach-Object { \$time = [System.DateTimeOffset]::FromUnixTimeSeconds(\$_.Value.reset).LocalDateTime.ToString('yyyy-MM-dd HH:mm:ss'); Write-Output ('Stage: ' + \$_.Name.ToUpper().PadRight(28) + ' | Remaining: ' + \$_.Value.remaining.ToString().PadRight(5) + ' / ' + \$_.Value.limit.ToString().PadRight(6) + ' | Resets At: ' + \$time) }; Remove-Item raw_limits.json -Force }\""
                         
                         echo "----------------------------------------"
                     }
@@ -55,7 +55,7 @@ pipeline {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                   // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://github.com"
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://registry.hub.github.com"
                   bat "wsl docker push ${dockerimagename}:latest"
               }
           }
