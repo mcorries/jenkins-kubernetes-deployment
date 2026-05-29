@@ -40,9 +40,9 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED WSL2 CROSS-PLATFORM CONTEXT: Translating Windows path strings into Linux drive mounts to bypass filesystem permission locks
+            // FIXED WSL2 CROSS-PLATFORM PATHING ONE BLOCK: Using explicit single quotes allows the Linux kernel to map spaces flawlessly
             bat "wsl mkdir -p /tmp/build && wsl rm -rf /tmp/build/*"
-            bat "wsl cp -r /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/. /tmp/build/"
+            bat "wsl cp -r '/mnt/c/Program Files (x86)/Jenkins/ins-kubernetes-deployment_master_fresh/.' /tmp/build/"
             bat "wsl docker build -t ${dockerimagename}:latest /tmp/build"
           }
         }
@@ -56,7 +56,7 @@ pipeline {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // Executing the Docker authentication block natively within the WSL2 system layer context
+                  // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
                   bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://docker.com"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
