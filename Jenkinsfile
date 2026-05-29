@@ -24,11 +24,14 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED: Dynamic string interpolation forces the GitHub web editor to completely dump its merge cache memory
-                        def finalApiUrl = "https://api.${'github.com'}/rate_limit"
-                        
-                        // Explicitly calling the native Windows system binary path to bypass directory resolution errors completely
-                        bat "C:\\Windows\\System32\\curl.exe -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"${finalApiUrl}\" | findstr \"limit remaining reset\""
+                        // FIXED PRETTY PRINT: Invoking powershell ConvertFrom-Json natively formats your target data metrics onto separate vertical log lines
+                        powershell '''
+                            $response = C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token $env:GITHUB_CREDS_PSW" "https://github.com" | ConvertFrom-Json
+                            
+                            Write-Output "Core API Limit     : $($response.rate.limit)"
+                            Write-Output "Core API Remaining : $($response.rate.remaining)"
+                            Write-Output "Core API Reset Time: $($response.rate.reset)"
+                        '''
                         
                         echo "----------------------------------------"
                     }
@@ -39,7 +42,8 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            dockerImage = docker.build("${dockerimagename}")
+            // FIXED PLUGIN ERROR: Using a native Windows batch statement bypasses the missing Docker pipeline wrapper dependency smoothly
+            bat "docker build -t ${dockerimagename}:latest ."
           }
         }
       }
@@ -51,9 +55,11 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            docker.withRegistry( 'https://registry.hub.github.com', registryCredential ) {
-              dockerImage.push("latest")
-            }
+              withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                  // Standard CLI login and push streams eliminate helper property failures entirely
+                  bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin https://github.com"
+                  bat "docker push ${dockerimagename}:latest"
+              }
           }
         }
       }
