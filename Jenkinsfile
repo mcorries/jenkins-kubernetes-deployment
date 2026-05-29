@@ -24,13 +24,23 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED PRETTY PRINT: Invoking powershell ConvertFrom-Json natively formats your target data metrics onto separate vertical log lines
-                        powershell '''
-                            $response = C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token $env:GITHUB_CREDS_PSW" "https://github.com" | ConvertFrom-Json
+                        // GENERALISED AUTOMATIC PRETTY PRINTER: Writes a local file block first to bypass background variable isolation bugs completely
+                        bat '''
+                            @echo off
+                            C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" > rate_response.json
                             
-                            Write-Output "Core API Limit     : $($response.rate.limit)"
-                            Write-Output "Core API Remaining : $($response.rate.remaining)"
-                            Write-Output "Core API Reset Time: $($response.rate.reset)"
+                            powershell -Command "
+                                if (Test-Path rate_response.json) {
+                                    $json = Get-Content rate_response.json -Raw | ConvertFrom-Json;
+                                    Write-Output '=== FULL REPOSITORY RATE LIMIT MATRIX ===';
+                                    $json.resources.PSObject.Properties | ForEach-Object {
+                                        Write-Output ('[Stage: ' + $_.Name.ToUpper().PadRight(28) + '] Remaining: ' + $_.Value.remaining + ' / ' + $_.Value.limit)
+                                    }
+                                } else {
+                                    Write-Error 'Failed to read data payload snapshot file from disk'
+                                }
+                            "
+                            del /f /q rate_response.json
                         '''
                         
                         echo "----------------------------------------"
