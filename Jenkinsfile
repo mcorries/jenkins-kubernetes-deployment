@@ -15,18 +15,17 @@ pipeline {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
                 script {
-                    // THE COMPILER LOCK BREAKER: Explicitly shifts execution to a completely isolated, unlocked folder context
                     ws('ins-kubernetes-deployment_master_fresh') {
                         echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                         
-                        // Manually run checkout scm inside the completely fresh folder to fetch your clean code snapshot natively
+                        // Manually run checkout scm inside the safe stage block to bypass the global tracking error smoothly
                         checkout scm
                         
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // RESTING FIXED DATA ENDPOINT: Targeting the official data api gateway directly inside a single-quoted block
-                        bat 'curl -s -H "Authorization: token %GITHUB_CREDS_PSW%" -H "User-Agent: Jenkins-Pipeline" -H "Accept: application/vnd.github.v3+json" "https://github.com" | findstr "limit remaining reset"'
+                        // FIXED: Correct public data API endpoint path explicitly locked inside single quotes
+                        bat 'curl "https://github.com" -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" | findstr "limit remaining reset"'
                         
                         echo "----------------------------------------"
                     }
@@ -49,7 +48,7 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            docker.withRegistry( 'https://docker.com', registryCredential ) {
+            docker.withRegistry( 'https://github.com', registryCredential ) {
               dockerImage.push("latest")
             }
           }
