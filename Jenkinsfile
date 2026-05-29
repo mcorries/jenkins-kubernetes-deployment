@@ -24,8 +24,8 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED: Enforcing a double-quoted batch layout completely stops your web browser from using old history files
-                        bat "curl -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"https://github.com\" | findstr \"limit remaining reset\""
+                        // FIXED PATH & ENDPOINT: Explicitly targets C:\Windows\System32\curl.exe and hits https://github.com directly
+                        bat 'C:\\Windows\\System32\\curl.exe -s -H "Accept: application/vnd.github.v3+json" -H "User-Agent: Jenkins-Pipeline" -H "Authorization: token %GITHUB_CREDS_PSW%" "https://github.com" | findstr "limit remaining reset"'
                         
                         echo "----------------------------------------"
                     }
@@ -66,4 +66,3 @@ pipeline {
     }
   }
 }
-
