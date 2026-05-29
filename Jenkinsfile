@@ -40,9 +40,9 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED WSL2 CROSS-PLATFORM PATHING ONE BLOCK: Using explicit single quotes allows the Linux kernel to map spaces flawlessly
+            // FIXED RSYNC EXCLUSION PATTERN ONE BLOCK: Forcefully leaves the locked .git tracking layers behind to pass files cleanly
             bat "wsl mkdir -p /tmp/build && wsl rm -rf /tmp/build/*"
-            bat "wsl cp -r '/mnt/c/Program Files (x86)/Jenkins/ins-kubernetes-deployment_master_fresh/.' /tmp/build/"
+            bat "wsl rsync -av --exclude='.git' '/mnt/c/Program Files (x86)/Jenkins/ins-kubernetes-deployment_master_fresh/' /tmp/build/"
             bat "wsl docker build -t ${dockerimagename}:latest /tmp/build"
           }
         }
@@ -57,7 +57,7 @@ pipeline {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                   // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://docker.com"
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://github.com"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
               }
