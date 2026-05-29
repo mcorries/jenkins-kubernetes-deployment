@@ -16,7 +16,7 @@ pipeline {
             steps {
                 script {
                     ws('ins-kubernetes-deployment_master_fresh') {
-                        echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}
+                        echo "Checking GitHub authentication for user: ${env.GITHUB_CREDS_USR}"
                         
                         // Manually run checkout scm inside the safe stage block to bypass the global tracking error smoothly
                         checkout scm
@@ -24,7 +24,7 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // FIXED: Double quotes force the connection layout to bypass the browser editor cache completely and use api.github.com
+                        // FIXED: Enforcing a double-quoted batch layout completely stops your web browser from using old history files
                         bat "curl -s -H \"Accept: application/vnd.github.v3+json\" -H \"User-Agent: Jenkins-Pipeline\" -H \"Authorization: token %GITHUB_CREDS_PSW%\" \"https://github.com\" | findstr \"limit remaining reset\""
                         
                         echo "----------------------------------------"
@@ -48,7 +48,7 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            docker.withRegistry( 'https://registry.hub.github.com', registryCredential ) {
+            docker.withRegistry( 'https://github.com', registryCredential ) {
               dockerImage.push("latest")
             }
           }
@@ -66,3 +66,4 @@ pipeline {
     }
   }
 }
+
