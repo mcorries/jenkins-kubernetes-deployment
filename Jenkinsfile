@@ -24,7 +24,7 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force api.github.com execution natively
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force ://github.com execution natively
                         def finalApiUrl = "https://api.${'github.com'}/rate_limit"
                         
                         // FIXED TYPE PREFIX: Using [System.DateTimeOffset] maps the .NET class perfectly to translate the epoch integers
@@ -40,8 +40,10 @@ pipeline {
       steps{
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // WSL2 ROUTING FIXED: Passing instructions through the wsl wrapper to handshake directly with your Kind backend engine daemon
-            bat "wsl docker build -t ${dockerimagename}:latest ."
+            // FIXED WSL2 CROSS-PLATFORM CONTEXT: Translating Windows path strings into Linux drive mounts to bypass filesystem permission locks
+            bat "wsl mkdir -p /tmp/build && wsl rm -rf /tmp/build/*"
+            bat "wsl cp -r /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/. /tmp/build/"
+            bat "wsl docker build -t ${dockerimagename}:latest /tmp/build"
           }
         }
       }
@@ -54,9 +56,10 @@ pipeline {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://registry.hub.github.com"
+                  // Executing the Docker authentication block natively within the WSL2 system layer context
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://docker.com"
                   bat "wsl docker push ${dockerimagename}:latest"
+                  bat "wsl rm -rf /tmp/build"
               }
           }
         }
