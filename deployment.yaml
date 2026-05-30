@@ -1,27 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: deployment #The name of the Kubernetes 
-        #Deployment to be created in the Kubernetes cluster
+  name: deployment
   labels:
     app: react-app
 spec:
-  replicas: 2 #The number of pods to be created in the 
-   #Kubernetes cluster for the React.js application container
+  replicas: 2
   selector:
     matchLabels:
       app: react-app
   template:
     metadata:
       labels:
-        app: react-app 
+        app: react-app
     spec:
       containers:
-      - name: react-app #The name of the react.js application container
-        #The Docker image for building the React.js application container
-        image: mcorries/react-app:latest 
+      - name: react-app
+        image: mcorries/react-app:latest # <- This targets your private repo target cleanly
         ports:
-        - containerPort: 3000 #The port for the React.js application container
-      # FIXED SPACING ONE BLOCK: Indented exactly 6 spaces to sit as a core peer property of your pod template spec array
+        - containerPort: 3000
+        # FIXED 1: Injected environment maps to bypass prompts and open ports automatically
+        env:
+        - name: CI
+          value: "true"
+        - name: HOST
+          value: "0.0.0.0"
+        # FIXED 2: Interactive terminal bindings hardlocked to keep the Node process running
+        stdin: true
+        tty: true
       imagePullSecrets:
       - name: private-dockerhub-secret
