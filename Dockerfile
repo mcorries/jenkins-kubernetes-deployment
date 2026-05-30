@@ -17,6 +17,9 @@ COPY . .
 #Expose the React.js application container on port 3000
 EXPOSE 3000
 #The command to start the React.js application container
-#Force the React application listener engine to accept traffic routed from external cluster networks
+# Force the React application listener engine to accept traffic routed from external cluster networks
 ENV HOST=0.0.0.0
+# FIXED FINITO BOUNDARY: Explicitly blocks Node from attempting to spawn external host OS browser windows
+ENV BROWSER=none
+
 CMD ["npm", "start"]
