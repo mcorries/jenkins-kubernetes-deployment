@@ -8,7 +8,9 @@ pipeline {
     // The next single line automatically binds both username and password variables globally
     // 'my-github-creds' is the ID of your credential stored in Jenkins
     GITHUB_CREDS = credentials('my-github-creds')
-    dockerimagename = "bravinwasike/react-app"
+    
+    // 1. PRIVATIZED REPOSITORY PATH: Replace YOUR_DOCKERHUB_USERNAME with your true personal Docker Hub profile name string
+    dockerimagename = "mcorries/react-app"
     dockerImage = ""                                                                                            
     }          
     stages {
@@ -24,7 +26,7 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force ://github.com execution natively
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force api.github.com execution natively
                         def finalApiUrl = "https://api.${'github.com'}/rate_limit"
                         
                         // FIXED TYPE PREFIX: Using [System.DateTimeOffset] maps the .NET class perfectly to translate the epoch integers
@@ -56,8 +58,8 @@ pipeline {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // Standard CLI login and push streams executed inside WSL2 to eliminate local Windows network drops entirely
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u %DOCKER_USER% --password-stdin https://github.com"
+                  // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.com"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
               }
