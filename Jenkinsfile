@@ -10,7 +10,7 @@ pipeline {
     GITHUB_CREDS = credentials('my-github-creds')
     
     // 1. PRIVATIZED REPOSITORY PATH: Replace YOUR_DOCKERHUB_USERNAME with your true personal Docker Hub profile name string
-    dockerimagename = "YOUR_DOCKERHUB_USERNAME/react-app"
+    dockerimagename = "mcorries/react-app"
     dockerImage = ""                                                                                            
     }          
     stages {
@@ -59,7 +59,7 @@ pipeline {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                   // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u YOUR_DOCKERHUB_USERNAME --password-stdin https://docker.io"
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.io"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
               }
