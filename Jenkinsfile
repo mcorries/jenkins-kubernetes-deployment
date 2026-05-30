@@ -10,7 +10,7 @@ pipeline {
     GITHUB_CREDS = credentials('my-github-creds')
     
     // 1. PRIVATIZED REPOSITORY PATH: Replace YOUR_DOCKERHUB_USERNAME with your true personal Docker Hub profile name string
-    dockerimagename = "mcorries/react-app"
+    dockerimagename = "YOUR_DOCKERHUB_USERNAME/react-app"
     dockerImage = ""                                                                                            
     }          
     stages {
@@ -59,7 +59,7 @@ pipeline {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                   // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.io"
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u YOUR_DOCKERHUB_USERNAME --password-stdin https://docker.io"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
               }
@@ -71,9 +71,12 @@ pipeline {
       steps {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED K8S INTERFACES: Swapping out legacy broken shortcuts for your active native kubernetesApply step wrapper configuration
-            kubernetesApply(file: "deployment.yaml")
-            kubernetesApply(file: "service.yaml")
+            // FIXED ENVIRONMENT TARGET: Wrapping steps in withKubeConfig natively injects the cluster routing context variables
+            // Ensure 'kubernetes-config' matches the exact ID of your stored Kubeconfig file credential in Jenkins
+            withKubeConfig([credentialsId: 'k8s-jenkins']) {
+                kubernetesApply(file: "deployment.yaml")
+                kubernetesApply(file: "service.yaml")
+            }
           }
         }  
       }
