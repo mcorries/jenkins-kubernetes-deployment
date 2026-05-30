@@ -26,7 +26,7 @@ pipeline {
                         echo "----------------------------------------"
                         echo "SUCCESS: Programmatically Retrieved Live Metrics"
                         
-                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force api.github.com execution natively
+                        // YOUR CHAMPION CACHE-BREAKER LINE: Hard-locked into place to force ://github.com execution natively
                         def finalApiUrl = "https://api.${'github.com'}/rate_limit"
                         
                         // FIXED TYPE PREFIX: Using [System.DateTimeOffset] maps the .NET class perfectly to translate the epoch integers
@@ -59,7 +59,7 @@ pipeline {
           ws('ins-kubernetes-deployment_master_fresh') {
               withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                   // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.com"
+                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.io"
                   bat "wsl docker push ${dockerimagename}:latest"
                   bat "wsl rm -rf /tmp/build"
               }
@@ -71,8 +71,9 @@ pipeline {
       steps {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // Standard kubernetesDeploy steps can now map local assets freely since workspace directory files are synchronized
-            kubernetesDeploy(configs: "deployment.yaml", "service.yaml")
+            // FIXED K8S INTERFACES: Swapping out legacy broken shortcuts for your active native kubernetesApply step wrapper configuration
+            kubernetesApply(file: "deployment.yaml")
+            kubernetesApply(file: "service.yaml")
           }
         }  
       }
