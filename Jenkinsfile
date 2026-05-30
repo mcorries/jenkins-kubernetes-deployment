@@ -68,12 +68,20 @@ pipeline {
       }
     }
     stage('Deploying React.js container to Kubernetes') {
+      environment {
+          registryCredential = 'dockerhub-credentials'
+      }
       steps {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED K8S RUNTIME BLOCK: Calling wsl kubectl apply directly routes the manifests through your active Kind cluster natively
-            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
-            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
+              withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                  // FIXED FOR POSTERITY: Securely initializes or updates the private image registry credentials mapping directly within the cluster namespace
+                  bat "wsl kubectl create secret docker-registry private-dockerhub-secret --docker-server=https://docker.io --docker-username=%DOCKER_USER% --docker-password=%DOCKER_PASS% --dry-run=client -o yaml | wsl kubectl apply -f -"
+                  
+                  // Run native wsl apply statements for your layout files cleanly
+                  bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
+                  bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
+              }
           }
         }  
       }

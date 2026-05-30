@@ -22,3 +22,6 @@ spec:
         image: mcorries/react-app:latest 
         ports:
         - containerPort: 3000 #The port for the React.js application container
+        # This tells Kubernetes to wait for the secret that Jenkins is about to create on line 76
+    imagePullSecrets:
+    - name: private-dockerhub-secret
