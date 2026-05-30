@@ -71,12 +71,9 @@ pipeline {
       steps {
         script {
           ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED ENVIRONMENT TARGET: Wrapping steps in withKubeConfig natively injects the cluster routing context variables
-            // Ensure 'kubernetes-config' matches the exact ID of your stored Kubeconfig file credential in Jenkins
-            withKubeConfig([credentialsId: 'k8s-jenkins']) {
-                kubernetesApply(file: "deployment.yaml")
-                kubernetesApply(file: "service.yaml")
-            }
+            // FIXED K8S RUNTIME BLOCK: Calling wsl kubectl apply directly routes the manifests through your active Kind cluster natively
+            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
+            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
           }
         }  
       }
