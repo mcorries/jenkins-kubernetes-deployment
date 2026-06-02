@@ -16,17 +16,8 @@ spec:
     spec:
       containers:
       - name: react-app
-        image: mcorries/react-app:latest # <- This targets your private repo target cleanly
+        image: mcorries/react-app:latest
         ports:
-        - containerPort: 3000
-        # FIXED 1: Injected environment maps to bypass prompts and open ports automatically
-        env:
-        - name: CI
-          value: "true"
-        - name: HOST
-          value: "0.0.0.0"
-        # FIXED 2: Interactive terminal bindings hardlocked to keep the Node process running
-        stdin: true
-        tty: true
+        - containerPort: 80
       imagePullSecrets:
       - name: private-dockerhub-secret

@@ -1,25 +1,13 @@
-#It will use node:24-alpine as the parent image for 
-#building the Docker image
-FROM node:24-alpine
-#It will create a working directory for Docker. The Docker
-#image will be created in this working directory.
+# STAGE 1: Build Environment
+FROM node:24-alpine AS build-stage
 WORKDIR /react-app
-#Copy the React.js application dependencies from the 
-#package.json to the react-app working directory.
-COPY package.json .
-COPY package-lock.json .
-#install all the React.js application dependencies
-RUN npm i
-#<!-- Copy the remaining React.js application folders and files from 
-#the `jenkins-kubernetes-deployment` local folder to the Docker 
-#react-app working directory -->
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
 COPY . .
-#Expose the React.js application container on port 3000
-EXPOSE 3000
-#The command to start the React.js application container
-# Force the React application listener engine to accept traffic routed from external cluster networks
-ENV HOST=0.0.0.0
-# FIXED FINITO BOUNDARY: Explicitly blocks Node from attempting to spawn external host OS browser windows
-ENV BROWSER=none
+RUN npm run build
 
-CMD ["npm", "start"]
+# STAGE 2: Production Server
+FROM nginx:stable-alpine AS production-stage
+COPY --from=build-stage /react-app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

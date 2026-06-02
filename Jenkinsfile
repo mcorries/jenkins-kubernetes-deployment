@@ -1,18 +1,29 @@
 pipeline {
     agent any
+    
+    parameters {
+        choice(
+            name: 'DEPLOY_ACTION', 
+            choices: ['Full_Build_And_Deploy', 'Rate_Limit_Check_Only'], 
+            description: 'Choose whether to execute a complete application update or a standalone rate-limit validation check.'
+        )
+    }
+    
     options {
         // Safe declarative option. Turns off the automatic background commit checks that are causing the red X block
         skipDefaultCheckout()
     }
-    environment {
-    // The next single line automatically binds both username and password variables globally
-    // 'my-github-creds' is the ID of your credential stored in Jenkins
-    GITHUB_CREDS = credentials('my-github-creds')
     
-    // 1. PRIVATIZED REPOSITORY PATH: Replace YOUR_DOCKERHUB_USERNAME with your true personal Docker Hub profile name string
-    dockerimagename = "mcorries/react-app"
-    dockerImage = ""                                                                                            
+    environment {
+        // The next single line automatically binds both username and password variables globally
+        // 'my-github-creds' is the ID of your credential stored in Jenkins
+        GITHUB_CREDS = credentials('my-github-creds')
+        
+        // PRIVATIZED REPOSITORY PATH: Replace YOUR_DOCKERHUB_USERNAME with your true personal Docker Hub profile name string
+        dockerimagename = "mcorries/react-app"
+        dockerImage = ""                                                                                            
     }          
+    
     stages {
         stage('Verify GitHub Auth & Rate Limit') {
             steps {
@@ -38,53 +49,65 @@ pipeline {
                 }
             }
         }
-    stage('Build image') {
-      steps{
-        script {
-          ws('ins-kubernetes-deployment_master_fresh') {
-            // FIXED RSYNC EXCLUSION PATTERN ONE BLOCK: Forcefully leaves the locked .git tracking layers behind to pass files cleanly
-            bat "wsl mkdir -p /tmp/build && wsl rm -rf /tmp/build/*"
-            bat "wsl rsync -av --exclude='.git' '/mnt/c/Program Files (x86)/Jenkins/ins-kubernetes-deployment_master_fresh/' /tmp/build/"
-            bat "wsl docker build -t ${dockerimagename}:latest /tmp/build"
-          }
+        
+        stage('Build image') {
+            when {
+                expression { params.DEPLOY_ACTION == 'Full_Build_And_Deploy' }
+            }
+            steps{
+                script {
+                    ws('ins-kubernetes-deployment_master_fresh') {
+                        // FIXED RSYNC EXCLUSION PATTERN ONE BLOCK: Forcefully leaves the locked .git tracking layers behind to pass files cleanly
+                        bat "wsl mkdir -p /tmp/build && wsl rm -rf /tmp/build/*"
+                        bat "wsl rsync -av --exclude='.git' '/mnt/c/Program Files (x86)/Jenkins/ins-kubernetes-deployment_master_fresh/' /tmp/build/"
+                        bat "wsl docker build -t ${dockerimagename}:latest /tmp/build"
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Pushing Image') {
-      environment {
-          registryCredential = 'dockerhub-credentials'
-           }
-      steps{
-        script {
-          ws('ins-kubernetes-deployment_master_fresh') {
-              withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
-                  bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.io"
-                  bat "wsl docker push ${dockerimagename}:latest"
-                  bat "wsl rm -rf /tmp/build"
-              }
-          }
+        
+        stage('Pushing Image') {
+            when {
+                expression { params.DEPLOY_ACTION == 'Full_Build_And_Deploy' }
+            }
+            environment {
+                registryCredential = 'dockerhub-credentials'
+            }
+            steps{
+                script {
+                    ws('ins-kubernetes-deployment_master_fresh') {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                            // FIXED LOGINS: Replaced his name and pointed securely to the official Docker Hub login registry endpoint
+                            bat "wsl echo %DOCKER_PASS% | wsl docker login -u mcorries --password-stdin https://docker.io"
+                            bat "wsl docker push ${dockerimagename}:latest"
+                            bat "wsl rm -rf /tmp/build"
+                        }
+                    }
+                }
+            }
         }
-      }
+        
+        stage('Deploying React.js container to Kubernetes') {
+            when {
+                expression { params.DEPLOY_ACTION == 'Full_Build_And_Deploy' }
+            }
+            environment {
+                registryCredential = 'dockerhub-credentials'
+            }
+            steps {
+                script {
+                    ws('ins-kubernetes-deployment_master_fresh') {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                            // FIXED FOR POSTERITY: Securely initializes or updates the private image registry credentials mapping directly within the cluster namespace
+                            bat "wsl kubectl create secret docker-registry private-dockerhub-secret --docker-server=https://docker.io --docker-username=%DOCKER_USER% --docker-password=%DOCKER_PASS% --dry-run=client -o yaml | wsl kubectl apply -f -"
+                            
+                            // Run native wsl apply statements for your layout files cleanly
+                            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
+                            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
+                        }
+                    }
+                }  
+            }
+        }
     }
-    stage('Deploying React.js container to Kubernetes') {
-      environment {
-          registryCredential = 'dockerhub-credentials'
-      }
-      steps {
-        script {
-          ws('ins-kubernetes-deployment_master_fresh') {
-              withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                  // FIXED FOR POSTERITY: Securely initializes or updates the private image registry credentials mapping directly within the cluster namespace
-                  bat "wsl kubectl create secret docker-registry private-dockerhub-secret --docker-server=https://docker.io --docker-username=%DOCKER_USER% --docker-password=%DOCKER_PASS% --dry-run=client -o yaml | wsl kubectl apply -f -"
-                  
-                  // Run native wsl apply statements for your layout files cleanly
-                  bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
-                  bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
-              }
-          }
-        }  
-      }
-    }
-  }
 }
