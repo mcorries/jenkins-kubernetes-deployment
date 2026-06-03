@@ -2,7 +2,7 @@
 FROM node:24-alpine AS build-stage
 WORKDIR /react-app
 COPY package.json package-lock.json ./
-RUN npm ci --only=production
+RUN npm install
 COPY . .
 RUN npm run build
 
