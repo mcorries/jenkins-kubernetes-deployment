@@ -102,8 +102,12 @@ pipeline {
                             bat "wsl kubectl create secret docker-registry private-dockerhub-secret --docker-server=https://docker.io --docker-username=%DOCKER_USER% --docker-password=%DOCKER_PASS% --dry-run=client -o yaml | wsl kubectl apply -f -"
                             
                             // Run native wsl apply statements for your layout files cleanly
-                            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
-                            bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
+							bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/deployment.yaml"
+							bat "wsl kubectl apply -f /mnt/c/Program\\ Files\\ \\(x86\\)/Jenkins/ins-kubernetes-deployment_master_fresh/service.yaml"
+
+							// FORCE THE POD UPDATE: Tells Kubernetes to gracefully cycle the containers with the latest build
+							bat "wsl kubectl rollout restart deployment/deployment"
+							
                         }
                     }
                 }  
